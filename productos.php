@@ -9,8 +9,8 @@ try {
     }
 
     // Filtrar productos por búsqueda
-    $sql = "SELECT id, nombre, descripcion, categoria, estado, proveedor 
-            FROM productos 
+    $sql = "SELECT producto_id, nombre, descripcion, descontinuado
+            FROM producto 
             WHERE nombre ILIKE :searchTerm OR categoria ILIKE :searchTerm OR estado ILIKE :searchTerm";
     $stmt = $pdo->prepare($sql);
     $stmt->execute(['searchTerm' => '%' . $searchTerm . '%']);
