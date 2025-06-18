@@ -21,7 +21,7 @@ $nombreCompleto = $datosUsuario ? $datosUsuario['nombre'] . ' ' . $datosUsuario[
 $rol = strtolower($datosUsuario['rol'] ?? '');
 
 // Filtros
-$filtroProducto = $_GET['producto'] ?? '';
+$filtroDevolucion = $_GET['devolucion'] ?? '';
 $filtroFecha = $_GET['fecha'] ?? '';
 $filtroTipo = $_GET['tipo'] ?? '';
 
@@ -29,17 +29,17 @@ $filtroTipo = $_GET['tipo'] ?? '';
 $where = [];
 $params = [];
 
-if (!empty($filtroProducto)) {
-    $where[] = "pr.nombre ILIKE :producto";
-    $params[':producto'] = "%$filtroProducto%";
+if (!empty($filtroDevolucion)) {
+    $where[] = "d.devolucion_id = :devolucion";
+    $params[':devolucion'] = $filtroDevolucion;
 }
 if (!empty($filtroFecha)) {
-    $where[] = "d.fecha = :fecha";
+    $where[] = "CAST(d.fecha AS DATE) = :fecha";
     $params[':fecha'] = $filtroFecha;
 }
 if (!empty($filtroTipo)) {
-    $where[] = "d.tipo ILIKE :tipo";
-    $params[':tipo'] = "%$filtroTipo%";
+    $where[] = "d.tipo = :tipo";
+    $params[':tipo'] = $filtroTipo;
 }
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -49,13 +49,13 @@ $sql = "SELECT d.devolucion_id, d.fecha, dd.cantidad, dd.motivo, dd.reingresado_
                pr.nombre AS producto,
                CASE
                  WHEN d.tipo = 'cliente' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                               FROM persona p
-                                               JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
-                                               WHERE uc.usuario_cliente_id = d.usuario_cliente_id)
+                                                FROM persona p
+                                                JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
+                                                WHERE uc.usuario_cliente_id = d.usuario_cliente_id)
                  WHEN d.tipo = 'proveedor' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                                 FROM persona p
-                                                 JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
-                                                 WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
+                                                  FROM persona p
+                                                  JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
+                                                  WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
                  ELSE 'No asignado'
                END AS devuelto_por,
                d.tipo
@@ -115,13 +115,17 @@ $devoluciones = $stmt->fetchAll();
       <!-- Formulario de búsqueda -->
       <form class="row g-2 mb-4" method="GET">
         <div class="col-md-3">
-          <input type="text" name="producto" value="<?= htmlspecialchars($filtroProducto) ?>" class="form-control" placeholder="Buscar Producto">
+          <input type="number" name="devolucion" value="<?= htmlspecialchars($filtroDevolucion) ?>" class="form-control" placeholder="#Devolución">
         </div>
         <div class="col-md-3">
           <input type="date" name="fecha" value="<?= htmlspecialchars($filtroFecha) ?>" class="form-control">
         </div>
         <div class="col-md-3">
-          <input type="text" name="tipo" value="<?= htmlspecialchars($filtroTipo) ?>" class="form-control" placeholder="Tipo (cliente/proveedor)">
+          <select name="tipo" class="form-select">
+            <option value="">Todos</option>
+            <option value="cliente" <?= $filtroTipo === 'cliente' ? 'selected' : '' ?>>Cliente</option>
+            <option value="proveedor" <?= $filtroTipo === 'proveedor' ? 'selected' : '' ?>>Proveedor</option>
+          </select>
         </div>
         <div class="col-md-3">
           <button class="btn btn-primary w-100">Buscar</button>

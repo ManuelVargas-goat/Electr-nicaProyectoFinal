@@ -21,12 +21,14 @@ $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
 $nombreCompleto = $datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno'];
 $rolUsuario = strtolower($datosUsuario['rol']);
 
+// Obtener estados disponibles
+$estados = $pdo->query("SELECT nombre FROM estado ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN);
+
 // Filtros
 $filtroProducto = $_GET['producto'] ?? '';
 $filtroFecha = $_GET['fecha'] ?? '';
 $filtroEstado = $_GET['estado'] ?? '';
 
-// Armado dinámico del WHERE
 $where = [];
 $params = [];
 
@@ -45,7 +47,6 @@ if (!empty($filtroEstado)) {
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-// Consulta principal
 $sql = "SELECT p.pedido_id, p.fecha_pedido, pr.nombre AS producto, dp.cantidad,
                dp.precio_unidad, per.nombre || ' ' || per.apellido_paterno AS empleado, p.estado
         FROM pedido p
@@ -71,7 +72,6 @@ $resultado = $stmt->fetchAll();
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
 </head>
-
 <body>
 <div class="container-fluid">
   <div class="row">
@@ -101,13 +101,11 @@ $resultado = $stmt->fetchAll();
     <div class="col-md-10 content">
       <h3 class="mb-4">Gestión de Existencias - Pedidos</h3>
 
-      <!-- Botón para nuevo pedido -->
       <div class="mb-3">
         <a href="nuevo_pedido.php" class="btn btn-success">➕ Generar Nuevo Pedido</a>
       </div>
 
-      <!-- Formulario de búsqueda -->
-      <form class="row g-2 filter-group mb-3" method="GET">
+      <form class="row g-2 mb-3" method="GET">
         <div class="col-md-3">
           <input type="text" name="producto" value="<?= htmlspecialchars($filtroProducto) ?>" class="form-control" placeholder="Buscar Producto">
         </div>
@@ -115,7 +113,14 @@ $resultado = $stmt->fetchAll();
           <input type="date" name="fecha" value="<?= htmlspecialchars($filtroFecha) ?>" class="form-control">
         </div>
         <div class="col-md-3">
-          <input type="text" name="estado" value="<?= htmlspecialchars($filtroEstado) ?>" class="form-control" placeholder="Buscar Estado">
+          <select name="estado" class="form-select">
+            <option value="">Todos los Estados</option>
+            <?php foreach ($estados as $estado): ?>
+              <option value="<?= htmlspecialchars($estado) ?>" <?= $filtroEstado === $estado ? 'selected' : '' ?>>
+                <?= ucfirst($estado) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
         </div>
         <div class="col-md-3">
           <button class="btn btn-primary w-100">Buscar</button>
@@ -146,7 +151,7 @@ $resultado = $stmt->fetchAll();
                 <td>S/ <?= number_format($row['precio_unidad'], 2) ?></td>
                 <td><?= $row['empleado'] ?? 'No asignado' ?></td>
                 <td>
-                  <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : 'warning' ?>">
+                  <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : (strtolower($row['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
                     <?= ucfirst($row['estado']) ?>
                   </span>
                 </td>
@@ -156,7 +161,6 @@ $resultado = $stmt->fetchAll();
           </tbody>
         </table>
       </div>
-
     </div>
   </div>
 </div>
