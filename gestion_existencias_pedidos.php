@@ -7,7 +7,62 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
-// Obtener datos del usuario actual
+$mensaje = '';
+
+// Procesar acciones
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!empty($_POST['accion']) && !empty($_POST['pedido_id']) && is_numeric($_POST['pedido_id'])) {
+        $accion = $_POST['accion'];
+        $pedidoId = (int) $_POST['pedido_id'];
+
+        try {
+            $pdo->beginTransaction();
+
+            if ($accion === 'confirmar') {
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'entregado' WHERE pedido_id = :id");
+                $stmt->execute([':id' => $pedidoId]);
+
+                $stmtDetalles = $pdo->prepare("SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = :id");
+                $stmtDetalles->execute([':id' => $pedidoId]);
+
+                while ($detalle = $stmtDetalles->fetch()) {
+                    $productoId = $detalle['producto_id'];
+                    $cantidad = $detalle['cantidad'];
+
+                    $checkStock = $pdo->prepare("SELECT COUNT(*) FROM stock WHERE producto_id = :producto_id");
+                    $checkStock->execute([':producto_id' => $productoId]);
+                    $existe = $checkStock->fetchColumn();
+
+                    if ($existe) {
+                        $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad WHERE producto_id = :producto_id");
+                        $actualizarStock->execute([
+                            ':cantidad' => $cantidad,
+                            ':producto_id' => $productoId
+                        ]);
+                    } else {
+                        $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad) VALUES (:producto_id, :cantidad)");
+                        $insertarStock->execute([
+                            ':producto_id' => $productoId,
+                            ':cantidad' => $cantidad
+                        ]);
+                    }
+                }
+
+                $mensaje = 'Recepción confirmada y stock actualizado correctamente.';
+            } elseif ($accion === 'cancelar') {
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'cancelado' WHERE pedido_id = :id");
+                $stmt->execute([':id' => $pedidoId]);
+                $mensaje = 'Pedido cancelado correctamente.';
+            }
+
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $mensaje = "Error al procesar acción: " . $e->getMessage();
+        }
+    }
+}
+
 $usuario = $_SESSION['usuario'];
 $sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
                 FROM usuario_empleado ue
@@ -21,10 +76,8 @@ $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
 $nombreCompleto = $datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno'];
 $rolUsuario = strtolower($datosUsuario['rol']);
 
-// Obtener estados disponibles
 $estados = $pdo->query("SELECT nombre FROM estado ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN);
 
-// Filtros
 $filtroProducto = $_GET['producto'] ?? '';
 $filtroFecha = $_GET['fecha'] ?? '';
 $filtroEstado = $_GET['estado'] ?? '';
@@ -101,6 +154,13 @@ $resultado = $stmt->fetchAll();
     <div class="col-md-10 content">
       <h3 class="mb-4">Gestión de Existencias - Pedidos</h3>
 
+      <?php if (!empty($mensaje)): ?>
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+          <?= htmlspecialchars($mensaje) ?>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+        </div>
+      <?php endif; ?>
+
       <div class="mb-3">
         <a href="nuevo_pedido.php" class="btn btn-success">➕ Generar Nuevo Pedido</a>
       </div>
@@ -138,7 +198,7 @@ $resultado = $stmt->fetchAll();
               <th>Precio</th>
               <th>Empleado</th>
               <th>Estado</th>
-              <th>Seleccionar</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody class="text-center">
@@ -155,7 +215,36 @@ $resultado = $stmt->fetchAll();
                     <?= ucfirst($row['estado']) ?>
                   </span>
                 </td>
-                <td><button class="btn btn-sm btn-info">Editar</button></td>
+                <td>
+                  <?php if (!in_array(strtolower($row['estado']), ['entregado', 'cancelado'])): ?>
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Acciones
+                      </button>
+                      <ul class="dropdown-menu">
+                        <li>
+                          <form method="POST" style="display:inline;">
+                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                            <input type="hidden" name="accion" value="confirmar">
+                            <button type="submit" class="dropdown-item">Confirmar Recepción</button>
+                          </form>
+                        </li>
+                        <li>
+                          <form method="POST" style="display:inline;">
+                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                            <input type="hidden" name="accion" value="cancelar">
+                            <button type="submit" class="dropdown-item">Cancelar Pedido</button>
+                          </form>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="editar_pedido.php?id=<?= $row['pedido_id'] ?>">Modificar</a>
+                        </li>
+                      </ul>
+                    </div>
+                  <?php else: ?>
+                    <button class="btn btn-sm btn-secondary" disabled><?= ucfirst($row['estado']) ?></button>
+                  <?php endif; ?>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>
@@ -164,5 +253,6 @@ $resultado = $stmt->fetchAll();
     </div>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

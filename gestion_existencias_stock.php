@@ -39,9 +39,10 @@ if (!empty($filtroCategoria)) {
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$sql = "SELECT p.producto_id, p.nombre, p.marca, p.unidad_stock, c.nombre AS categoria
+$sql = "SELECT p.producto_id, p.nombre, p.marca, c.nombre AS categoria, COALESCE(s.cantidad, 0) AS stock_disponible
         FROM producto p
         LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
+        LEFT JOIN stock s ON p.producto_id = s.producto_id
         $whereClause
         ORDER BY p.producto_id DESC";
 
@@ -109,6 +110,8 @@ $productos = $stmt->fetchAll();
               <th>Marca</th>
               <th>Categoría</th>
               <th>Stock Disponible</th>
+              <th>Acción</th>
+
             </tr>
           </thead>
           <tbody class="text-center">
@@ -118,7 +121,11 @@ $productos = $stmt->fetchAll();
                 <td><?= htmlspecialchars($producto['nombre']) ?></td>
                 <td><?= htmlspecialchars($producto['marca']) ?></td>
                 <td><?= htmlspecialchars($producto['categoria'] ?? 'Sin categoría') ?></td>
-                <td><?= $producto['unidad_stock'] ?></td>
+                <td><?= $producto['stock_disponible'] ?></td>
+               <td><a href="detalle_stock.php?producto_id=<?= $producto['producto_id'] ?>">Ver detalles</a>
+
+</td>
+
               </tr>
             <?php endforeach; ?>
           </tbody>
