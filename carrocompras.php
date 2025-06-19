@@ -1,43 +1,21 @@
 <?php
-
 include("config.php");
 
+$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
 
-$id = isset($_GET['id']) ? $_GET['id'] : '';
+print_r($_SESSION);
+if ($productos != null){
+     foreach ($productos as $clave => $cantidad){
 
-if($id == ''){
-    echo 'Error al CARGAR el producto';
-    exit;
+        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
+                              From producto pr
+                              WHERE pr.producto_id=? AND descontinuado= false ");
+        $sql->execute([$clave]);
+        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
 
-} else {
-    
-    $sql= "SELECT count(producto_id) FROM producto WHERE producto_id=?";
+     }
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$id]);
-    $resultado = $stmt->fetchAll();
-
-    if ($resultado > 0){
-
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, pr.descripcion as descripcion, cat.nombre as categoria
-                              From producto pr INNER JOIN categoria cat 
-                              ON cat.categoria_id = pr.categoria_id
-                              WHERE producto_id=? LIMIT 1");
-        $sql->execute([$id]);
-        $row = $sql->fetch(PDO::FETCH_ASSOC);
-        $id = $row['id'];
-        $nombre = $row['nombre'];
-        $descripcion = $row['descripcion'];
-        $marca = $row['marca'];
-        $precio = $row['precio'];
-
-
-    } else {
-        echo 'Error al cargar el producto';
-        exit;
-    }
 }
-
 
 ?>
 
@@ -51,10 +29,10 @@ if($id == ''){
 
      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+     
+     <link rel="stylesheet" href="css/index.css">
+
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-     
-     
-     
   </head>
 
 <!-- Nav Bar Redes-->
@@ -107,126 +85,76 @@ if($id == ''){
 </header>
 
 <!-- Fin Header -->
+
 <body>
 
-    <!-- Inicio Card Producto Seleccionado -->
+<div class="container">
+    <br><br>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Imagen</th>
+                    <th>Producto</th>
+                    <th>Precio</th>
+                    <th>Cantidad</th>
+                    <th>Subtotal</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if($lista_carrito == null){
+                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
+                } else {
+                    $total = 0;
+                    foreach($lista_carrito as $producto){
+                        
+                        $_id = $producto['id'];
+                        $nombre = $producto ['nombre'];
+                        $precio = $producto['precio'];
+                        $cantidad = $producto['cantidad'];
+                        $subtotal= $cantidad * $precio;
+                        $total= $subtotal;
+                     ?>
+                <tr>
+                    <td><?php echo $_id; ?></td>
+                    <td><?php echo $nombre; ?></td>
+                    <td><?php echo $precio; ?></td>
+                    <td>
+                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
+                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="">
+                    </td>
+                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo $subtotal; ?></div>
+                </td>
+                    <td><a href="#" id="eliminar" class="btn btn-warning btn-sm" data-bs-id="<?php echo $_id; ?>"
+                    data-bs-toogle="modal" data-bs-target="eliminarModal">Eliminar</a></td>
+                </tr>
+               <?php } ?>
 
-    <section class="bg-light">
-        <div class="container pb-5">
-            <div class="row">
-                <div class="col-lg-5 mt-5">
-                    <div class="card mb-3">
-                        <img class="card-img img-fluid" src="imgs/<?= $nombre; ?>.png" alt="Card image cap" id="product-detail">
-                    </div>
-                    
-                </div>
-                <!-- col end -->
-                <div class="col-lg-7 mt-5">
-                    <div class="card">
-                        <div class="card-body">
-                            <h1 class="h2"><?=  $nombre; ?></h1>
-                            <p class="h3 py-2">S/. <?=  $precio; ?></p>
-                            <ul class="list-inline">
-                                <li class="list-inline-item">
-                                    <h6>Marca:</h6>
-                                </li>
-                                <li class="list-inline-item">
-                                    <p class="text-muted"><strong><?=  $marca; ?></strong></p>
-                                </li>
-                            </ul>
-
-                            <h6>Descripcion:</h6>
-                            <p><?=  $descripcion; ?></p>
-                            <ul class="list-inline">
-                                <li class="list-inline-item"> <!-- Por ver, no hay informacion en las tablas -->
-                                    <h6>Colores Disponibles :</h6>
-                                </li>
-                                <li class="list-inline-item"> 
-                                    <p class="text-muted"><strong>Blanco/ Negro</strong></p>
-                                </li>
-                            </ul>
-
-                            <h6>Especificaciones:</h6> <!-- Por ver, no hay informacion en las tablas -->
-                            <ul class="list-unstyled pb-3">
-                                <li>Lorem ipsum dolor sit</li>
-                                <li>Amet, consectetur</li>
-                                <li>Adipiscing elit,set</li>
-                                <li>Duis aute irure</li>
-                                <li>Ut enim ad minim</li>
-                                <li>Dolore magna aliqua</li>
-                                <li>Excepteur sint</li>
-                            </ul>
-                                <div class="row">
-                                    
-                                    <div class="col-auto">
-                                        <ul class="list-inline pb-3">
-                                            <li class="list-inline-item text-right">
-                                                Cantidad
-                                                <input type="hidden" name="product-quanity" id="product-quanity" value="1">
-                                            </li>
-                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-minus">-</span></li>
-                                            <li class="list-inline-item"><span class="badge bg-secondary" id="var-value">1</span></li>
-                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-plus">+</span></li>
-                                        </ul>
-                                    </div>
-                                </div>
-
-
-                                <div class="row pb-3">
-                                    <div class="col d-grid">
-                                        <button type="submit" class="btn btn-success btn-lg" name="submit" value="buy">Comprar</button>
-                                    </div>
-                                    <div class="col d-grid">
-                                        <button type="submit" class="btn btn-success btn-lg" onclick="addProducto(<?=  $id; ?>)" name="submit" value="addtocard">Añadir al Carro</button>
-                                    </div>
-                                </div>
-                          
-
-                        </div>
-                    </div>
-                </div>
-            </div>
+               <tr>
+                <td colspan="4"></td>
+                <td colspan="2">
+                    <p class="h3" id="total"><?php echo 'S/.' . number_format($total,2,'.',',') ;?></p>
+                </td>
+               </tr>
+            </tbody>
+         <?php } ?>
+        </table>
+    </div>
+    
+    <div class="row">
+        <div class="col md-5 offset-md-7 d-grid gap-2">
+            <button class="btn btn-primary btn-lg">Realizar pago</button>
         </div>
-    </section>
-    <!-- Fin Card Producto Seleccionado -->
+    </div>
 
+    <br><br>
 
-<!-- Script Contador de Productos en Carrito -->
-    <script>
-       
-        function addProducto(id){
-            let url = "/paginas/Electronica-prueba/comprasact.php"
-            let formData = new FormData()
-            formData.append('id',id)         
-
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    console.log(data.numero);
-                    let elemento = document.getElementById("num_cart")
-                    elemento.innerHTML = data.numero
-                }else{console.log('Error')}
-            })
-        }
-
-
-     </script>
+</div>
 
 </body>
-
-
-
-
-
-
   
-<!-- Inicio Footer -->
+<!-- Start Footer -->
     <footer class="bg-dark" id="tempaltemo_footer">
         <div class="container">
             <div class="row">
@@ -306,6 +234,6 @@ if($id == ''){
         </div>
 
     </footer>
-    <!-- Fin Footer -->
+    <!-- End Footer -->
 
 </html>    

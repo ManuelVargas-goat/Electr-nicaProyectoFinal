@@ -20,10 +20,10 @@ $resultado = $stmt->fetchAll();
 
      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
-     
-     <link rel="stylesheet" href="css/index.css">
-
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+     
+     
+     
   </head>
 
 <!-- Nav Bar Redes-->
@@ -63,7 +63,8 @@ $resultado = $stmt->fetchAll();
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
                 <a href="login.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-                <a href="carrocompras.php" class="btn btn-primary "><i class="fa-solid fa-cart-shopping"></i> Carrito</a>
+                <a href="carrocompras.php" class="btn btn-primary position-relative">
+                <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
             </div>
         
@@ -77,6 +78,8 @@ $resultado = $stmt->fetchAll();
 <!-- Fin Header -->
 
 <body>
+
+<!-- Inicio Carousel de Productos Selecionados -->
 
 <div id="carousel" class="carousel slide" data-bs-ride="carousel">
         
@@ -121,7 +124,7 @@ $resultado = $stmt->fetchAll();
                 <div class="container">
                     <div class="row p-5">
                         <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
-                            <img class="img-fluid" src="MotorolaPolus.png" alt="">
+                            <img class="img-fluid" src="imgs/Moto G Movil.png" alt="">
                         </div>
                         <div class="col-lg-6 mb-0 d-flex align-items-center">
                             <div class="text-align-left">
@@ -145,8 +148,10 @@ $resultado = $stmt->fetchAll();
     <span class="visually-hidden">Next</span>
   </button>
     </div>
+    
+<!-- Fin Carousel de Productos Selecionados -->
 
-<!-- Start Featured Product -->
+<!-- Inicio Productos selecionados en general -->
     <section class="bg-light">
         <div class="container py-5">
             <div class="row text-center py-3">
@@ -172,32 +177,49 @@ $resultado = $stmt->fetchAll();
   </div><p class=" my-4"><?= $row['descripcion'] ?></p> 
   <div class="row">
     <div class="d-grid col-9"><a  href="Producto.php?id=<?= $row['id'] ?>" class="btn btn-warning"><?= $row['precio'] ?></a> </div>
-    <div class="d-grid col-2"> <a class="btn btn-primary"><i class="fa-solid fa-cart-plus"></i></a> </div>
+    <div class="d-grid col-2"> <buttton class="btn btn-primary" onclick="addProducto(<?= $row['id'] ?>)"><i class="fa-solid fa-cart-plus"></i></button> </div>
 </div> </div> </div> </div> 
  
 <?php endforeach; ?>
 
 
-
-
-
-
-
-
-
  </div> </div>
 
-        
-               
-                
             </div>
         </div>
     </section>
-    <!-- End Featured Product -->
+    <!-- Fin Productos selecionados en general -->
+
+     <!-- Script Contador de Productos en Carrito -->
+<script>
+       
+        function addProducto(id){
+            let url = "/paginas/Electronica-prueba/comprasact.php"
+            let formData = new FormData()
+            formData.append('id',id)         
+
+
+            fetch(
+                url,
+                {
+                method:'POST',
+                body: formData,   
+                mode: 'cors',     
+            }).then(response=>response.json()).then((data) => {
+                if(data.ok){
+                    console.log(data.numero);
+                    let elemento = document.getElementById("num_cart")
+                    elemento.innerHTML = data.numero
+                }else{console.log('Error')}
+            })
+        }
+
+
+     </script>
 
 </body>
   
-<!-- Start Footer -->
+<!-- Inicio Footer -->
     <footer class="bg-dark" id="tempaltemo_footer">
         <div class="container">
             <div class="row">
@@ -277,6 +299,6 @@ $resultado = $stmt->fetchAll();
         </div>
 
     </footer>
-    <!-- End Footer -->
+    <!-- Fin Footer -->
 
 </html>    

@@ -12,4 +12,14 @@ try {
     echo 'Error de conexión: ' . $e->getMessage();
     die();
 }
+
+ // Inicio de sesion
+session_start();
+
+ // Contador de Productos en Carrito
+
+$num_cart = 0;
+if (isset($_SESSION['carrito']['productos'])){
+    $num_cart= count($_SESSION['carrito']['productos']);
+}
 ?>
