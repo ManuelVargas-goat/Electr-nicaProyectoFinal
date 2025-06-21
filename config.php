@@ -14,7 +14,6 @@ try {
 }
 
  // Inicio de sesion
-session_start();
 
  // Contador de Productos en Carrito
 
