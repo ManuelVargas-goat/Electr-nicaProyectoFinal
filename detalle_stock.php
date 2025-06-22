@@ -10,8 +10,13 @@ if (!isset($_GET['producto_id']) || !is_numeric($_GET['producto_id'])) {
 $producto_id = (int)$_GET['producto_id'];
 
 $sql = "
-    SELECT 'Entrada' AS tipo, TO_CHAR(p.fecha_pedido, 'DD/MM/YYYY') AS fecha, TO_CHAR(p.fecha_pedido, 'HH24:MI') AS hora, 
-           per.nombre || ' ' || per.apellido_paterno AS persona, dp.cantidad
+    -- Entrada por pedido (Ingreso nuevo)
+    SELECT 
+        'Entrada (Ingreso nuevo)' AS tipo,
+        TO_CHAR(p.fecha_pedido, 'DD/MM/YYYY') AS fecha,
+        TO_CHAR(p.fecha_pedido, 'HH24:MI') AS hora, 
+        per.nombre || ' ' || per.apellido_paterno AS persona,
+        dp.cantidad
     FROM pedido p
     JOIN detalle_pedido dp ON p.pedido_id = dp.pedido_id
     JOIN usuario_empleado ue ON ue.usuario_empleado_id = p.usuario_empleado_id
@@ -20,8 +25,13 @@ $sql = "
 
     UNION
 
-    SELECT 'Salida' AS tipo, TO_CHAR(c.fecha_compra, 'DD/MM/YYYY') AS fecha, TO_CHAR(c.fecha_compra, 'HH24:MI') AS hora,
-           cli.nombre || ' ' || cli.apellido_paterno AS persona, dc.cantidad
+    -- Salida por compra (venta al cliente)
+    SELECT 
+        'Salida (Venta)' AS tipo,
+        TO_CHAR(c.fecha_compra, 'DD/MM/YYYY') AS fecha,
+        TO_CHAR(c.fecha_compra, 'HH24:MI') AS hora,
+        cli.nombre || ' ' || cli.apellido_paterno AS persona,
+        dc.cantidad
     FROM compra c
     JOIN detalle_compra dc ON c.compra_id = dc.compra_id
     JOIN usuario_cliente uc ON c.usuario_cliente_id = uc.usuario_cliente_id
@@ -30,10 +40,11 @@ $sql = "
 
     UNION
 
+    -- Entradas y salidas por devoluciones
     SELECT 
         CASE 
-            WHEN d.tipo = 'cliente' THEN 'Entrada'
-            ELSE 'Salida'
+            WHEN d.tipo = 'cliente' THEN 'Entrada (Devolución de cliente)'
+            ELSE 'Salida (Devolución a proveedor)'
         END AS tipo,
         TO_CHAR(d.fecha, 'DD/MM/YYYY') AS fecha,
         TO_CHAR(d.fecha, 'HH24:MI') AS hora,
@@ -50,7 +61,6 @@ $sql = "
 
     ORDER BY fecha DESC, hora DESC
 ";
-
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute([':producto_id' => $producto_id]);
