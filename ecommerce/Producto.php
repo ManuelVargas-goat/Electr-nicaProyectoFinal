@@ -2,7 +2,7 @@
 
 include("config.php");
 
-
+$cantidadinit = 1;
 $id = isset($_GET['id']) ? $_GET['id'] : '';
 
 if($id == ''){
@@ -164,9 +164,9 @@ if($id == ''){
                                                 Cantidad
                                                 <input type="hidden" name="product-quanity" id="product-quanity" value="1">
                                             </li>
-                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-minus">-</span></li>
-                                            <li class="list-inline-item"><span class="badge bg-secondary" id="var-value">1</span></li>
-                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-plus">+</span></li>
+                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-minus" onclick="menos()">-</span></li>
+                                            <li class="list-inline-item"><span type="number" class="badge bg-secondary" id="cantidadprod" ><?php echo $cantidadinit; ?></span></li>
+                                            <li class="list-inline-item"><span class="btn btn-success" id="btn-plus" onclick="mas()">+</span></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -174,7 +174,7 @@ if($id == ''){
 
                                 <div class="row pb-3">
                                     <div class="col d-grid">
-                                        <button type="submit" class="btn btn-success btn-lg" name="submit" value="buy">Comprar</button>
+                                        <a type="submit" href="carrocompras.php" class="btn btn-success btn-lg" onclick="addProducto(<?=  $id; ?>)" name="submit" value="buy">Comprar</a>
                                     </div>
                                     <div class="col d-grid">
                                         <button type="submit" class="btn btn-success btn-lg" onclick="addProducto(<?=  $id; ?>)" name="submit" value="addtocard">Añadir al Carro</button>
@@ -193,7 +193,23 @@ if($id == ''){
 
 <!-- Script Contador de Productos en Carrito -->
     <script>
-       
+
+    
+    function mas() {
+      let elementoContador = document.getElementById("cantidadprod").innerHTML
+      if(elementoContador < 20) {
+       elementoContador++
+       document.getElementById('cantidadprod').innerHTML = elementoContador
+      }      
+    }
+
+    function menos() {
+      let elementoContador = document.getElementById("cantidadprod").innerHTML
+      if(elementoContador > 1 ) {
+       elementoContador--
+       document.getElementById('cantidadprod').innerHTML = elementoContador
+      }   
+    }
         function addProducto(id){
             let url = "/paginas/Electronica-prueba/comprasact.php"
             let formData = new FormData()

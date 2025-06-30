@@ -1,13 +1,21 @@
 <?php
 include("config.php");
 
-$sql= "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria
-       From producto pr INNER JOIN categoria cat 
-       ON cat.categoria_id = pr.categoria_id";
+$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute();
-$resultado = $stmt->fetchAll();
+if ($productos != null){
+     foreach ($productos as $clave => $cantidad){
+
+        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
+                              From producto pr
+                              WHERE pr.producto_id=? AND descontinuado= false ");
+        $sql->execute([$clave]);
+        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
+
+     }
+
+}
+
 ?>
 
 
@@ -20,10 +28,10 @@ $resultado = $stmt->fetchAll();
 
      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+     
+     <link rel="stylesheet" href="css/index.css">
+
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-     
-     
-     
   </head>
 
 <!-- Nav Bar Redes-->
@@ -79,125 +87,90 @@ $resultado = $stmt->fetchAll();
 
 <body>
 
-<!-- Inicio Carousel de Productos Selecionados -->
+<div class="container">
+    <br><br>
+    <div class="table-responsive" >
+        <table class="table" style="text-align: center;">
+            <thead>
+                <tr>
+                    <th>Imagen</th>
+                    <th>Producto</th>
+                    <th>Precio</th>
+                    <th>Cantidad</th>
+                    <th>Subtotal</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if(empty($lista_carrito)){
+                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
+                } else {
+                    $total = 0;
+                    foreach($lista_carrito as $producto){
+                        
+                        $_id = $producto['id'];
+                        $nombre = $producto ['nombre'];
+                        $precio = $producto['precio'];
+                        $cantidad = $producto['cantidad'];
+                        $subtotal= $cantidad * $precio;
+                        $total += $subtotal;
+                     ?>
+                <tr>
 
-<div id="carousel" class="carousel slide" data-bs-ride="carousel">
-        
-        <div class="carousel-inner">
-            <div class="carousel-item active">
-                <div class="container">
-                    <div class="row p-5">
-                        <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
-                            <img class="img-fluid" src="imgs/AlcatelPiolus.png" alt="">
-                        </div>
-                        <div class="col-lg-6 mb-0 d-flex align-items-center">
-                            <div class="text-align-left align-self-center">
-                                <h1 class="h1 text-success"><b>Tienda</b> Electronica</h1>
-                                <h3 class="h2">Los mejores descuentos en moviles</h3>
-                                <p>
-                                Del <strong>11 al 15</strong> de noviembre ¡Aprovecha y compra todo da precios increibles!
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="carousel-item">
-                <div class="container">
-                    <div class="row p-5">
-                        <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
-                            <img class="img-fluid" src="imgs/AcerMaximus.png" alt="">
-                        </div>
-                        <div class="col-lg-6 mb-0 d-flex align-items-center">
-                            <div class="text-align-left">
-                                <h1 class="h1">Proident occaecat</h1>
-                                <h3 class="h2">Aliquip ex ea commodo consequat</h3>
-                                <p>
-                                    Lorem ipsum dolor sit amet consectetur adipiscing elit, placerat blandit malesuada nisi laoreet semper vel ornare, venenatis vivamus natoque tristique phasellus taciti.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="carousel-item">
-                <div class="container">
-                    <div class="row p-5">
-                        <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
-                            <img class="img-fluid" src="imgs/Moto G Movil.png" alt="">
-                        </div>
-                        <div class="col-lg-6 mb-0 d-flex align-items-center">
-                            <div class="text-align-left">
-                                <h1 class="h1">Repr in voluptate</h1>
-                                <h3 class="h2">Ullamco laboris nisi ut </h3>
-                                <p>
-                                    Lorem ipsum dolor sit amet consectetur adipiscing elit, placerat blandit malesuada nisi laoreet semper vel ornare, venenatis vivamus natoque tristique phasellus taciti.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    <td> <a href="Producto.php?id=<?php echo $_id; ?>">
+                        <img class="icontable" style="width: 100px; height: auto;" 
+                        src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>" >
+                    </a></td>
+
+                    <td><?php echo $nombre; ?></td>
+
+                    <td><?php echo $precio; ?></td>
+
+                    <td>
+                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
+                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
+                    </td>
+
+                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
+                    </td>
+
+                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
+                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
+                </tr>
+               <?php } ?>
+
+               <tr>
+                <td colspan="4"></td>
+                <td colspan="2">
+                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
+                </td>
+               </tr>
+            </tbody>
+            
+         
+        </table>
+        <div class="row">
+           <div class="col md-5 offset-md-7 d-grid gap-2">
+           <button class="btn btn-primary btn-lg">Realizar pago</button>
             </div>
         </div>
-        <button class="carousel-control-prev" type="button" data-bs-slide="prev">
-    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-    <span class="visually-hidden">Previous</span>
-  </button>
-  <button class="carousel-control-next" type="button" data-bs-slide="next">
-    <span class="carousel-control-next-icon" aria-hidden="true"></span>
-    <span class="visually-hidden">Next</span>
-  </button>
+        <?php } ?>
     </div>
     
-<!-- Fin Carousel de Productos Selecionados -->
+    
 
-<!-- Inicio Productos selecionados en general -->
-    <section class="bg-light">
-        <div class="container py-5">
-            <div class="row text-center py-3">
-                <div class="col-lg-6 m-auto">
-                    <h1 class="h1">Ofertas de semana</h1>
-                    <p>
-                        No te pierdas la oportunidad de aprovechar estos descuentos!
-                    </p>
-                </div>
-            </div>
-            <div class="row">
-               
-                    
-                    <div class="container-fluid bg-trasparent my-4 p-3" style="position: relative;"> 
-  <div class="row row-cols-1 row-cols-xs-2 row-cols-sm-2 row-cols-lg-4 g-3"> 
+    <br><br>
 
-<?php foreach ($resultado as $row): ?>
-
-<div class="col"> 
-   <div class="card h-100 shadow-sm"> <img src="imgs/<?= $row['nombre']; ?>.png" class="card-img-top" alt="..."></a> 
-   <div class="card-body"> 
-    <div class="h2 card-title text-center"><span class="float-center price-hp"><?= $row['nombre'] ?></span> 
-  </div><p class=" my-4"><?= $row['descripcion'] ?></p> 
-  <div class="row">
-    <div class="d-grid col-9"><a  href="Producto.php?id=<?= $row['id'] ?>" class="btn btn-warning"><?= $row['precio'] ?></a> </div>
-    <div class="d-grid col-2"> <buttton class="btn btn-primary" onclick="addProducto(<?= $row['id'] ?>)"><i class="fa-solid fa-cart-plus"></i></button> </div>
-</div> </div> </div> </div> 
- 
-<?php endforeach; ?>
-
-
- </div> </div>
-
-            </div>
-        </div>
-    </section>
-    <!-- Fin Productos selecionados en general -->
 
      <!-- Script Contador de Productos en Carrito -->
 <script>
        
-        function addProducto(id){
-            let url = "/paginas/Electronica-prueba/comprasact.php"
+        function actualizaCantidad(cantidad,id){
+            let url = "/paginas/Electronica-prueba/carroact.php"
             let formData = new FormData()
+            formData.append('action','agregar') 
             formData.append('id',id)         
-
+            formData.append('cantidad',cantidad)  
 
             fetch(
                 url,
@@ -207,19 +180,62 @@ $resultado = $stmt->fetchAll();
                 mode: 'cors',     
             }).then(response=>response.json()).then((data) => {
                 if(data.ok){
-                    console.log(data.numero);
-                    let elemento = document.getElementById("num_cart")
-                    elemento.innerHTML = data.numero
+                    let divsubtotal = document.getElementById("subtotal_" + id)
+                    divsubtotal.innerHTML = data.sub
+
+                    let total = 0.00
+                    let list = document.getElementsByName('subtotal[]')
+
+
+                    for(let i = 0; i < list.length; i++){
+
+                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
+                        
+                    }
+              console.log(total)    
+                    total = new Intl.NumberFormat('en-US',{
+                        minimumFractionDigits: 2
+                    }).format(total)
+                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
+
+                }else{console.log('Error')}
+            })
+        }
+
+        function EliminarProducto(id){
+
+            let url = "/paginas/Electronica-prueba/carroact.php"
+            let formData = new FormData()
+            formData.append('action','eliminar') 
+            formData.append('id',id)        
+
+            console.log(id)
+
+            fetch(
+                url,
+                {
+                method:'POST',
+                body: formData,   
+                mode: 'cors',     
+            }).then(response=>response.json()).then((data) => {
+                if(data.ok){
+                    location.reload()
+
+
                 }else{console.log('Error')}
             })
         }
 
 
-     </script>
+</script>
+
+
+</div>
+
 
 </body>
   
-<!-- Inicio Footer -->
+<!-- Start Footer -->
     <footer class="bg-dark" id="tempaltemo_footer">
         <div class="container">
             <div class="row">
@@ -299,6 +315,6 @@ $resultado = $stmt->fetchAll();
         </div>
 
     </footer>
-    <!-- Fin Footer -->
+    <!-- End Footer -->
 
 </html>    
