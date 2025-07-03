@@ -11,7 +11,6 @@ $usuario = $_SESSION['usuario'];
 $rol = $_SESSION['rol'];
 $nombre_persona = 'Usuario';
 
-// Consultar nombre completo
 $sql = "SELECT per.nombre || ' ' || per.apellido_paterno AS nombre_completo
         FROM usuario_empleado ue
         JOIN persona per ON ue.persona_id = per.persona_id
@@ -41,7 +40,7 @@ $nombre_persona = $stmt->fetchColumn();
             <?php endif; ?>
         </div>
 
-        <a href="productos.php">Gestión de Productos</a>
+        <a href="gestion_catalogo_categorias.php">Gestión de Catàlogo</a>
         <a href="usuarios.php">Gestión de Usuarios</a>
         <a href="gestion_existencias_pedidos.php">Gestión de Existencias</a>
         <a href="#">Configuración</a>

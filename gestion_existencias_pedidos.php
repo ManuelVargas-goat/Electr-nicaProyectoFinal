@@ -19,41 +19,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             if ($accion === 'confirmar') {
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'entregado' WHERE pedido_id = :id");
-                $stmt->execute([':id' => $pedidoId]);
+    // Confirmar el pedido y actualizar stock
+    $stmt = $pdo->prepare("UPDATE pedido SET estado = 'entregado' WHERE pedido_id = :id");
+    $stmt->execute([':id' => $pedidoId]);
 
-                $stmtDetalles = $pdo->prepare("SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = :id");
-                $stmtDetalles->execute([':id' => $pedidoId]);
+    $stmtDetalles = $pdo->prepare("SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = :id");
+    $stmtDetalles->execute([':id' => $pedidoId]);
 
-                while ($detalle = $stmtDetalles->fetch()) {
-                    $productoId = $detalle['producto_id'];
-                    $cantidad = $detalle['cantidad'];
+    while ($detalle = $stmtDetalles->fetch()) {
+        $productoId = $detalle['producto_id'];
+        $cantidad = $detalle['cantidad'];
 
-                    $checkStock = $pdo->prepare("SELECT COUNT(*) FROM stock WHERE producto_id = :producto_id");
-                    $checkStock->execute([':producto_id' => $productoId]);
-                    $existe = $checkStock->fetchColumn();
+        $checkStock = $pdo->prepare("SELECT COUNT(*) FROM stock WHERE producto_id = :producto_id");
+        $checkStock->execute([':producto_id' => $productoId]);
+        $existe = $checkStock->fetchColumn();
 
-                    if ($existe) {
-                        $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad WHERE producto_id = :producto_id");
-                        $actualizarStock->execute([
-                            ':cantidad' => $cantidad,
-                            ':producto_id' => $productoId
-                        ]);
-                    } else {
-                        $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad) VALUES (:producto_id, :cantidad)");
-                        $insertarStock->execute([
-                            ':producto_id' => $productoId,
-                            ':cantidad' => $cantidad
-                        ]);
-                    }
-                }
+        if ($existe) {
+            $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad WHERE producto_id = :producto_id");
+            $actualizarStock->execute([
+                ':cantidad' => $cantidad,
+                ':producto_id' => $productoId
+            ]);
+        } else {
+            $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad) VALUES (:producto_id, :cantidad)");
+            $insertarStock->execute([
+                ':producto_id' => $productoId,
+                ':cantidad' => $cantidad
+            ]);
+        }
+    }
 
-                $mensaje = 'Recepción confirmada y stock actualizado correctamente.';
-            } elseif ($accion === 'cancelar') {
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'cancelado' WHERE pedido_id = :id");
-                $stmt->execute([':id' => $pedidoId]);
-                $mensaje = 'Pedido cancelado correctamente.';
-            }
+    $mensaje = 'Recepción confirmada y stock actualizado correctamente.';
+} elseif ($accion === 'cancelar') {
+    // Solo cambia el estado. NO actualiza el stock
+    $stmt = $pdo->prepare("UPDATE pedido SET estado = 'cancelado' WHERE pedido_id = :id");
+    $stmt->execute([':id' => $pedidoId]);
+    $mensaje = 'Pedido cancelado correctamente (sin afectar el stock).';
+}
+
 
             $pdo->commit();
         } catch (Exception $e) {
@@ -100,22 +103,46 @@ if (!empty($filtroEstado)) {
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$sql = "SELECT p.pedido_id, p.fecha_pedido, pr.nombre AS producto, dp.cantidad,
-               dp.precio_unidad, per.nombre || ' ' || per.apellido_paterno AS empleado, p.estado
-        FROM pedido p
-        JOIN detalle_pedido dp ON p.pedido_id = dp.pedido_id
-        JOIN producto pr ON dp.producto_id = pr.producto_id
-        LEFT JOIN usuario_empleado ue ON ue.usuario_empleado_id = (
-            SELECT usuario_empleado_id FROM usuario_empleado ORDER BY usuario_empleado_id LIMIT 1
-        )
-        LEFT JOIN persona per ON ue.persona_id = per.persona_id
-        $whereClause
-        ORDER BY p.pedido_id DESC";
+$sql = "
+    SELECT 
+      p.pedido_id,
+      p.fecha_pedido,
+      p.estado,
+      per.nombre || ' ' || per.apellido_paterno AS empleado,
+      SUM(dp.cantidad * 
+        CASE 
+          WHEN dp.precio_unidad = 0 THEN pr.precio
+          ELSE dp.precio_unidad
+        END
+      ) AS total_precio,
+      SUM(dp.cantidad) AS total_cantidad,
+      json_agg(json_build_object(
+        'producto', pr.nombre,
+        'cantidad', dp.cantidad,
+        'precio', 
+          CASE 
+            WHEN dp.precio_unidad = 0 THEN pr.precio
+            ELSE dp.precio_unidad
+          END
+      )) AS productos
+    FROM pedido p
+    JOIN detalle_pedido dp ON p.pedido_id = dp.pedido_id
+    JOIN producto pr ON dp.producto_id = pr.producto_id
+    LEFT JOIN usuario_empleado ue ON ue.usuario_empleado_id = (
+      SELECT usuario_empleado_id FROM usuario_empleado ORDER BY usuario_empleado_id LIMIT 1
+    )
+    LEFT JOIN persona per ON ue.persona_id = per.persona_id
+    $whereClause
+    GROUP BY p.pedido_id, p.fecha_pedido, per.nombre, per.apellido_paterno, p.estado
+    ORDER BY p.pedido_id DESC
+";
+
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
-$resultado = $stmt->fetchAll();
+$resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 
 <!DOCTYPE html>
 <html lang="es">
@@ -186,73 +213,104 @@ $resultado = $stmt->fetchAll();
           <button class="btn btn-primary w-100">Buscar</button>
         </div>
       </form>
-
       <div class="table-responsive">
-        <table class="table table-bordered table-hover">
-          <thead class="text-center">
-            <tr>
-              <th>#Pedido</th>
-              <th>Fecha</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Precio</th>
-              <th>Empleado</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody class="text-center">
-            <?php foreach ($resultado as $row): ?>
-              <tr>
-                <td><?= $row['pedido_id'] ?></td>
-                <td><?= $row['fecha_pedido'] ?></td>
-                <td><?= $row['producto'] ?></td>
-                <td><?= $row['cantidad'] ?></td>
-                <td>S/ <?= number_format($row['precio_unidad'], 2) ?></td>
-                <td><?= $row['empleado'] ?? 'No asignado' ?></td>
-                <td>
-                  <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : (strtolower($row['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
-                    <?= ucfirst($row['estado']) ?>
-                  </span>
-                </td>
-                <td>
-                  <?php if (!in_array(strtolower($row['estado']), ['entregado', 'cancelado'])): ?>
-                    <div class="dropdown">
-                      <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        Acciones
-                      </button>
-                      <ul class="dropdown-menu">
-                        <li>
-                          <form method="POST" style="display:inline;">
-                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
-                            <input type="hidden" name="accion" value="confirmar">
-                            <button type="submit" class="dropdown-item">Confirmar Recepción</button>
-                          </form>
-                        </li>
-                        <li>
-                          <form method="POST" style="display:inline;">
-                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
-                            <input type="hidden" name="accion" value="cancelar">
-                            <button type="submit" class="dropdown-item">Cancelar Pedido</button>
-                          </form>
-                        </li>
-                        <li>
-                          <a class="dropdown-item" href="editar_pedido.php?id=<?= $row['pedido_id'] ?>">Modificar</a>
-                        </li>
-                      </ul>
-                    </div>
-                  <?php else: ?>
-                    <button class="btn btn-sm btn-secondary" disabled><?= ucfirst($row['estado']) ?></button>
-                  <?php endif; ?>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+  <table class="table table-bordered table-hover align-middle">
+    <thead class="text-center">
+      <tr>
+        <th>#Pedido</th>
+        <th>Fecha</th>
+        <th>Empleado</th>
+        <th>Cantidad Total</th>
+        <th>Total (S/)</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody class="text-center">
+      <?php foreach ($resultado as $row): ?>
+        <tr class="table-row">
+          <td 
+            data-bs-toggle="collapse" 
+            data-bs-target="#detalle<?= $row['pedido_id'] ?>" 
+            class="fw-bold" 
+            style="cursor:pointer">
+            <?= $row['pedido_id'] ?>
+          </td>
+          <td><?= $row['fecha_pedido'] ?></td>
+          <td><?= $row['empleado'] ?? 'No asignado' ?></td>
+          <td><?= $row['total_cantidad'] ?></td>
+          <td>S/ <?= number_format($row['total_precio'], 2) ?></td>
+          <td>
+            <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : (strtolower($row['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
+              <?= ucfirst($row['estado']) ?>
+            </span>
+          </td>
+          <td>
+            <?php if (!in_array(strtolower($row['estado']), ['entregado', 'cancelado'])): ?>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Acciones</button>
+                <ul class="dropdown-menu">
+                  <li>
+                    <form method="POST" class="m-0">
+                      <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                      <input type="hidden" name="accion" value="confirmar">
+                      <button type="submit" class="dropdown-item">Confirmar Recepción</button>
+                    </form>
+                  </li>
+                  <li>
+                    <form method="POST" class="m-0">
+                      <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                      <input type="hidden" name="accion" value="cancelar">
+                      <button type="submit" class="dropdown-item">Cancelar Pedido</button>
+                    </form>
+                  </li>
+                  <li>
+                    <a class="dropdown-item" href="editar_pedido.php?id=<?= $row['pedido_id'] ?>">Modificar</a>
+                  </li>
+                </ul>
+              </div>
+            <?php else: ?>
+              <button class="btn btn-sm btn-secondary" disabled><?= ucfirst($row['estado']) ?></button>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <tr class="collapse bg-light" id="detalle<?= $row['pedido_id'] ?>">
+          <td colspan="7">
+            <div class="p-3 text-start">
+              <h6 class="fw-bold mb-3">Productos del Pedido</h6>
+              <ul class="list-group list-group-flush">
+                <?php foreach (json_decode($row['productos'], true) as $item): ?>
+                  <li class="list-group-item d-flex justify-content-between">
+                    <span><?= htmlspecialchars($item['producto']) ?> (<?= $item['cantidad'] ?>)</span>
+                    <span>S/ <?= number_format($item['precio'], 2) ?></span>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+</div>
+      
     </div>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const dropdowns = document.querySelectorAll('.dropdown-toggle');
+    dropdowns.forEach(btn => {
+      btn.addEventListener('click', e => e.stopPropagation());
+    });
+
+    const menus = document.querySelectorAll('.dropdown-menu');
+    menus.forEach(menu => {
+      menu.addEventListener('click', e => e.stopPropagation());
+    });
+  });
+</script>
 </body>
 </html>

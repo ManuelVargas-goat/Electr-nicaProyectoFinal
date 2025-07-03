@@ -9,7 +9,6 @@ if (!isset($_SESSION['usuario'])) {
 
 $usuario = $_SESSION['usuario'];
 
-// Obtener ID del usuario_empleado
 $sql = "SELECT usuario_empleado_id FROM usuario_empleado WHERE usuario = :usuario";
 $stmt = $pdo->prepare($sql);
 $stmt->execute([':usuario' => $usuario]);
@@ -20,43 +19,43 @@ if (!$empleado) {
 }
 $usuarioEmpleadoId = $empleado['usuario_empleado_id'];
 
-// Listar Categorías, Productos y Proveedor_Producto
 $categorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre")->fetchAll();
 $productos = $pdo->query("SELECT producto_id, nombre, categoria_id, precio FROM producto ORDER BY nombre")->fetchAll();
 $proveedorProducto = $pdo->query("
     SELECT pp.producto_id, pr.proveedor_id, pr.nombre_empresa
     FROM proveedor_producto pp
     JOIN proveedor pr ON pr.proveedor_id = pp.proveedor_id
-    ORDER BY pr.nombre_empresa
 ")->fetchAll();
 
-// Registro del pedido
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $productoId = $_POST['producto_id'];
-    $proveedorId = $_POST['proveedor_id'];
-    $cantidad = $_POST['cantidad'];
-    $precio = $_POST['precio_unidad'];
+    $productoIds = $_POST['producto_id'];
+    $proveedorIds = $_POST['proveedor_id'];
+    $cantidades = $_POST['cantidad'];
+    $precios = $_POST['precio_unidad'];
 
-    if ($productoId && $cantidad && $precio && $proveedorId) {
+    if ($productoIds && $cantidades && $precios && $proveedorIds) {
         $pdo->beginTransaction();
 
         try {
-            $sqlPedido = "INSERT INTO pedido (fecha_pedido, estado, usuario_empleado_id)
-                          VALUES (CURRENT_DATE, 'pendiente', :usuario_id) RETURNING pedido_id";
-            $stmt = $pdo->prepare($sqlPedido);
+            // USAR NOW() en lugar de CURRENT_DATE
+            $stmt = $pdo->prepare("INSERT INTO pedido (fecha_pedido, estado, usuario_empleado_id)
+                                   VALUES (NOW(), 'pendiente', :usuario_id) RETURNING pedido_id");
             $stmt->execute([':usuario_id' => $usuarioEmpleadoId]);
             $pedidoId = $stmt->fetchColumn();
 
-            $sqlDetalle = "INSERT INTO detalle_pedido (pedido_id, producto_id, proveedor_id, cantidad, precio_unidad)
-                           VALUES (:pedido_id, :producto_id, :proveedor_id, :cantidad, :precio)";
-            $stmt = $pdo->prepare($sqlDetalle);
-            $stmt->execute([
-                ':pedido_id' => $pedidoId,
-                ':producto_id' => $productoId,
-                ':proveedor_id' => $proveedorId,
-                ':cantidad' => $cantidad,
-                ':precio' => $precio
-            ]);
+            $stmt = $pdo->prepare("INSERT INTO detalle_pedido 
+                (pedido_id, producto_id, proveedor_id, cantidad, precio_unidad)
+                VALUES (:pedido_id, :producto_id, :proveedor_id, :cantidad, :precio)");
+
+            for ($i = 0; $i < count($productoIds); $i++) {
+                $stmt->execute([
+                    ':pedido_id' => $pedidoId,
+                    ':producto_id' => $productoIds[$i],
+                    ':proveedor_id' => $proveedorIds[$i],
+                    ':cantidad' => $cantidades[$i],
+                    ':precio' => $precios[$i]
+                ]);
+            }
 
             $pdo->commit();
             header("Location: gestion_existencias_pedidos.php");
@@ -67,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-?>
 
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -81,39 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <h3 class="mb-4">Registrar Nuevo Pedido</h3>
 
   <form method="POST" class="border p-4 bg-white shadow-sm rounded">
-    <div class="mb-3">
-      <label for="categoria_id" class="form-label">Categoría</label>
-      <select name="categoria_id" id="categoria_id" class="form-select" required>
-        <option value="">Seleccione una categoría</option>
-        <?php foreach ($categorias as $cat): ?>
-          <option value="<?= $cat['categoria_id'] ?>"><?= htmlspecialchars($cat['nombre']) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
+    <div id="productos-container"></div>
+    <button type="button" class="btn btn-outline-secondary mb-4" onclick="agregarProducto()">+ Agregar Producto</button>
 
-    <div class="mb-3">
-      <label for="producto_id" class="form-label">Producto</label>
-      <select name="producto_id" id="producto_id" class="form-select" required disabled>
-        <option value="">Seleccione una categoría primero</option>
-      </select>
-    </div>
-
-    <div class="mb-3">
-      <label for="proveedor_id" class="form-label">Proveedor</label>
-      <select name="proveedor_id" id="proveedor_id" class="form-select" required disabled>
-        <option value="">Seleccione un producto primero</option>
-      </select>
-    </div>
-
-    <div class="mb-3">
-      <label for="cantidad" class="form-label">Cantidad</label>
-      <input type="number" name="cantidad" class="form-control" min="1" required>
-    </div>
-
-    <div class="mb-3">
-      <label for="precio_total" class="form-label">Precio Total (S/)</label>
-      <input type="number" id="precio_total" class="form-control" readonly>
-      <input type="hidden" name="precio_unidad" id="precio_unidad">
+    <div class="mb-3 text-end">
+      <label class="form-label fw-bold">Total General (S/)</label>
+      <input type="number" id="total-general" class="form-control text-end" readonly>
     </div>
 
     <div class="d-flex justify-content-between">
@@ -124,71 +96,122 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <script>
+const categorias = <?= json_encode($categorias) ?>;
 const productos = <?= json_encode($productos) ?>;
 const proveedorProducto = <?= json_encode($proveedorProducto) ?>;
 
-const categoriaSelect = document.getElementById('categoria_id');
-const productoSelect = document.getElementById('producto_id');
-const proveedorSelect = document.getElementById('proveedor_id');
-const cantidadInput = document.querySelector('input[name="cantidad"]');
-const precioTotalInput = document.getElementById('precio_total');
-const precioUnidadInput = document.getElementById('precio_unidad');
+function agregarProducto() {
+  const wrapper = document.createElement('div');
+  wrapper.classList.add('card', 'p-3', 'mb-4', 'shadow-sm');
+  wrapper.innerHTML = `
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Categoría</label>
+        <select class="form-select categoria-select" required>
+          <option value="">Seleccione...</option>
+          ${categorias.map(c => `<option value="${c.categoria_id}">${c.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Producto</label>
+        <select name="producto_id[]" class="form-select producto-select" required disabled>
+          <option value="">Seleccione una categoría primero</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Proveedor</label>
+        <select name="proveedor_id[]" class="form-select proveedor-select" required disabled>
+          <option value="">Seleccione un producto primero</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label">Cantidad</label>
+        <input type="number" name="cantidad[]" class="form-control cantidad-input" min="1" required>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label">Precio (S/)</label>
+        <input type="number" name="precio_unidad[]" class="form-control precio-unidad" readonly>
+      </div>
+      <div class="col-md-1 text-end">
+        <button type="button" class="btn btn-danger btn-sm" onclick="eliminarProducto(this)">Eliminar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('productos-container').appendChild(wrapper);
 
-categoriaSelect.addEventListener('change', () => {
-  const categoriaId = parseInt(categoriaSelect.value);
-  productoSelect.innerHTML = '<option value="">Seleccione un producto</option>';
-  proveedorSelect.innerHTML = '<option value="">Seleccione un producto primero</option>';
-  proveedorSelect.disabled = true;
+  const categoriaSelect = wrapper.querySelector('.categoria-select');
+  const productoSelect = wrapper.querySelector('.producto-select');
+  const proveedorSelect = wrapper.querySelector('.proveedor-select');
+  const precioUnidad = wrapper.querySelector('.precio-unidad');
+  const cantidadInput = wrapper.querySelector('.cantidad-input');
 
-  if (!categoriaId) {
-    productoSelect.disabled = true;
-    return;
-  }
-
-  const productosFiltrados = productos.filter(p => p.categoria_id === categoriaId);
-  productosFiltrados.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.producto_id;
-    opt.textContent = p.nombre;
-    productoSelect.appendChild(opt);
-  });
-
-  productoSelect.disabled = false;
-});
-
-productoSelect.addEventListener('change', () => {
-  const productoId = parseInt(productoSelect.value);
-  proveedorSelect.innerHTML = '<option value="">Seleccione un proveedor</option>';
-
-  if (!productoId) {
+  categoriaSelect.addEventListener('change', () => {
+    const categoriaId = parseInt(categoriaSelect.value);
+    productoSelect.innerHTML = '<option value="">Seleccione producto</option>';
+    proveedorSelect.innerHTML = '<option value="">Seleccione un producto primero</option>';
     proveedorSelect.disabled = true;
-    return;
-  }
+    precioUnidad.value = '';
+    cantidadInput.value = '';
 
-  const producto = productos.find(p => p.producto_id === productoId);
-  const precio = parseFloat(producto.precio);
-  precioUnidadInput.value = precio.toFixed(2);
-  actualizarPrecioTotal();
+    if (!categoriaId) {
+      productoSelect.disabled = true;
+      return;
+    }
 
-  const proveedores = proveedorProducto.filter(pp => pp.producto_id === productoId);
-  proveedores.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.proveedor_id;
-    opt.textContent = p.nombre_empresa;
-    proveedorSelect.appendChild(opt);
+    const productosFiltrados = productos.filter(p => p.categoria_id === categoriaId);
+    productosFiltrados.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.producto_id;
+      opt.textContent = p.nombre;
+      productoSelect.appendChild(opt);
+    });
+
+    productoSelect.disabled = false;
   });
 
-  proveedorSelect.disabled = false;
-});
+  productoSelect.addEventListener('change', () => {
+    const prodId = parseInt(productoSelect.value);
+    const producto = productos.find(p => p.producto_id === prodId);
+    precioUnidad.value = producto?.precio ?? '';
+    cantidadInput.value = '';
+    calcularTotalGeneral();
 
-cantidadInput.addEventListener('input', actualizarPrecioTotal);
+    proveedorSelect.innerHTML = '<option value="">Seleccione proveedor</option>';
+    proveedorProducto
+      .filter(pp => pp.producto_id === prodId)
+      .forEach(pp => {
+        const opt = document.createElement('option');
+        opt.value = pp.proveedor_id;
+        opt.textContent = pp.nombre_empresa;
+        proveedorSelect.appendChild(opt);
+      });
 
-function actualizarPrecioTotal() {
-  const cantidad = parseFloat(cantidadInput.value);
-  const precioUnitario = parseFloat(precioUnidadInput.value);
-  const total = !isNaN(cantidad) && !isNaN(precioUnitario) ? cantidad * precioUnitario : 0;
-  precioTotalInput.value = total.toFixed(2);
+    proveedorSelect.disabled = false;
+  });
+
+  cantidadInput.addEventListener('input', calcularTotalGeneral);
 }
+
+function eliminarProducto(btn) {
+  const card = btn.closest('.card');
+  card.remove();
+  calcularTotalGeneral();
+}
+
+function calcularTotalGeneral() {
+  const cards = document.querySelectorAll('.card');
+  let total = 0;
+  cards.forEach(card => {
+    const precio = parseFloat(card.querySelector('.precio-unidad')?.value || 0);
+    const cantidad = parseFloat(card.querySelector('.cantidad-input')?.value || 0);
+    if (!isNaN(precio) && !isNaN(cantidad)) {
+      total += precio * cantidad;
+    }
+  });
+  document.getElementById('total-general').value = total.toFixed(2);
+}
+
+window.addEventListener('DOMContentLoaded', agregarProducto);
 </script>
 </body>
 </html>

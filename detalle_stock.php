@@ -9,12 +9,21 @@ if (!isset($_GET['producto_id']) || !is_numeric($_GET['producto_id'])) {
 
 $producto_id = (int)$_GET['producto_id'];
 
+// Obtener nombre del producto
+$sql_nombre = "SELECT nombre FROM producto WHERE producto_id = :producto_id";
+$stmtNombre = $pdo->prepare($sql_nombre);
+$stmtNombre->execute([':producto_id' => $producto_id]);
+$producto = $stmtNombre->fetch(PDO::FETCH_ASSOC);
+$nombreProducto = $producto ? $producto['nombre'] : 'Desconocido';
+
+// Consulta de movimientos
+// Fragmento dentro del archivo PHP justo donde obtienes los movimientos
 $sql = "
     -- Entrada por pedido (Ingreso nuevo)
     SELECT 
         'Entrada (Ingreso nuevo)' AS tipo,
         TO_CHAR(p.fecha_pedido, 'DD/MM/YYYY') AS fecha,
-        TO_CHAR(p.fecha_pedido, 'HH24:MI') AS hora, 
+        TO_CHAR(p.fecha_pedido, 'HH24:MI') AS hora,
         per.nombre || ' ' || per.apellido_paterno AS persona,
         dp.cantidad
     FROM pedido p
@@ -44,6 +53,7 @@ $sql = "
     SELECT 
         CASE 
             WHEN d.tipo = 'cliente' THEN 'Entrada (Devolución de cliente)'
+            WHEN d.tipo = 'proveedor' AND dd.reingresado_stock IS TRUE THEN 'Entrada (Reingreso por devolución)'
             ELSE 'Salida (Devolución a proveedor)'
         END AS tipo,
         TO_CHAR(d.fecha, 'DD/MM/YYYY') AS fecha,
@@ -62,6 +72,8 @@ $sql = "
     ORDER BY fecha DESC, hora DESC
 ";
 
+
+
 $stmt = $pdo->prepare($sql);
 $stmt->execute([':producto_id' => $producto_id]);
 $movimientos = $stmt->fetchAll();
@@ -76,7 +88,7 @@ $movimientos = $stmt->fetchAll();
 </head>
 <body>
 <div class="container mt-4">
-  <h3 class="mb-4">Reporte de Movimientos del Producto ID <?= $producto_id ?></h3>
+  <h3 class="mb-4">Reporte de Movimientos - Producto ID <?= $producto_id ?>: <span class="text-primary"><?= htmlspecialchars($nombreProducto) ?></span></h3>
 
   <?php if (empty($movimientos)): ?>
     <div class="alert alert-warning">No hay movimientos registrados para este producto.</div>
@@ -95,7 +107,9 @@ $movimientos = $stmt->fetchAll();
         <tbody>
           <?php foreach ($movimientos as $mov): ?>
             <tr>
-              <td><?= $mov['tipo'] ?></td>
+              <td style="background-color: <?= str_starts_with($mov['tipo'], 'Entrada') ? '#d4edda' : '#ffe5b4' ?>;">
+                <?= $mov['tipo'] ?>
+              </td>
               <td><?= $mov['fecha'] ?></td>
               <td><?= $mov['hora'] ?></td>
               <td><?= htmlspecialchars($mov['persona']) ?></td>
@@ -111,3 +125,4 @@ $movimientos = $stmt->fetchAll();
 </div>
 </body>
 </html>
+

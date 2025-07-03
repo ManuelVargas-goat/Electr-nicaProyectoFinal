@@ -39,12 +39,49 @@ if (!empty($filtroCategoria)) {
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$sql = "SELECT p.producto_id, p.nombre, p.marca, c.nombre AS categoria, COALESCE(s.cantidad, 0) AS stock_disponible
-        FROM producto p
-        LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
-        LEFT JOIN stock s ON p.producto_id = s.producto_id
-        $whereClause
-        ORDER BY p.producto_id DESC";
+$sql = "
+SELECT p.producto_id,
+       p.nombre,
+       p.marca,
+       c.nombre AS categoria,
+       (
+         -- ENTRADAS
+         COALESCE((
+           SELECT SUM(dp.cantidad)
+           FROM detalle_pedido dp
+           JOIN pedido ped ON ped.pedido_id = dp.pedido_id
+           WHERE dp.producto_id = p.producto_id AND ped.estado = 'entregado'
+         ), 0)
+         +
+         COALESCE((
+           SELECT SUM(dd.cantidad)
+           FROM detalle_devolucion dd
+           JOIN devolucion dv ON dv.devolucion_id = dd.devolucion_id
+           WHERE dd.producto_id = p.producto_id AND dv.tipo = 'cliente' AND dd.reingresado_stock IS TRUE
+         ), 0)
+         -- SALIDAS
+         -
+         COALESCE((
+           SELECT SUM(dc.cantidad)
+           FROM detalle_compra dc
+           JOIN compra c ON dc.compra_id = c.compra_id
+           JOIN estado es ON c.estado_id = es.estado_id
+           WHERE dc.producto_id = p.producto_id AND es.nombre = 'confirmado'
+         ), 0)
+         -
+         COALESCE((
+           SELECT SUM(dd2.cantidad)
+           FROM detalle_devolucion dd2
+           JOIN devolucion dv2 ON dv2.devolucion_id = dd2.devolucion_id
+           WHERE dd2.producto_id = p.producto_id AND dv2.tipo = 'proveedor'
+         ), 0)
+       ) AS stock_disponible
+FROM producto p
+LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
+$whereClause
+ORDER BY p.producto_id DESC
+";
+
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -88,7 +125,6 @@ $productos = $stmt->fetchAll();
     <div class="col-md-10 content">
       <h3 class="mb-4">Gestión de Existencias - Stock</h3>
 
-      <!-- Formulario de búsqueda -->
       <form class="row g-2 mb-4" method="GET">
         <div class="col-md-4">
           <input type="text" name="nombre" value="<?= htmlspecialchars($filtroNombre) ?>" class="form-control" placeholder="Buscar por nombre">
@@ -102,8 +138,8 @@ $productos = $stmt->fetchAll();
       </form>
 
       <div class="table-responsive">
-        <table class="table table-bordered table-hover">
-          <thead class="text-center">
+        <table class="table table-bordered table-hover text-center">
+          <thead class="table-dark">
             <tr>
               <th>ID</th>
               <th>Nombre</th>
@@ -111,21 +147,19 @@ $productos = $stmt->fetchAll();
               <th>Categoría</th>
               <th>Stock Disponible</th>
               <th>Acción</th>
-
             </tr>
           </thead>
-          <tbody class="text-center">
+          <tbody>
             <?php foreach ($productos as $producto): ?>
               <tr>
                 <td><?= $producto['producto_id'] ?></td>
                 <td><?= htmlspecialchars($producto['nombre']) ?></td>
                 <td><?= htmlspecialchars($producto['marca']) ?></td>
                 <td><?= htmlspecialchars($producto['categoria'] ?? 'Sin categoría') ?></td>
-                <td><?= $producto['stock_disponible'] ?></td>
-               <td><a href="detalle_stock.php?producto_id=<?= $producto['producto_id'] ?>">Ver detalles</a>
-
-</td>
-
+                <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
+                  <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : $producto['stock_disponible'] ?>
+                </td>
+                <td><a href="detalle_stock.php?producto_id=<?= $producto['producto_id'] ?>" class="btn btn-sm btn-outline-info">Ver detalles</a></td>
               </tr>
             <?php endforeach; ?>
           </tbody>
