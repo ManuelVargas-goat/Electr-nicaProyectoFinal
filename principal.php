@@ -41,9 +41,9 @@ $nombre_persona = $stmt->fetchColumn();
         </div>
 
         <a href="gestion_catalogo_categorias.php">Gestión de Catàlogo</a>
-        <a href="usuarios.php">Gestión de Usuarios</a>
+        <a href="gestion_usuarios.php">Gestión de Usuarios</a>
         <a href="gestion_existencias_pedidos.php">Gestión de Existencias</a>
-        <a href="#">Configuración</a>
+        <a href="configuracion.php">Configuración</a>
         <a href="salir.php" class="text-danger">Cerrar Sesión</a>
     </div>
 

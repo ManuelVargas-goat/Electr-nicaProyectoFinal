@@ -46,19 +46,19 @@ $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
 // Consulta principal
 $sql = "SELECT d.devolucion_id, d.fecha, dd.cantidad, dd.motivo, dd.reingresado_stock,
-               pr.nombre AS producto,
-               CASE
-                 WHEN d.tipo = 'cliente' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                                FROM persona p
-                                                JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
-                                                WHERE uc.usuario_cliente_id = d.usuario_cliente_id)
-                 WHEN d.tipo = 'proveedor' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                                  FROM persona p
-                                                  JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
-                                                  WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
-                 ELSE 'No asignado'
-               END AS devuelto_por,
-               d.tipo
+                pr.nombre AS producto,
+                CASE
+                    WHEN d.tipo = 'cliente' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
+                                                    FROM persona p
+                                                    JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
+                                                    WHERE uc.usuario_cliente_id = d.usuario_cliente_id)
+                    WHEN d.tipo = 'proveedor' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
+                                                    FROM persona p
+                                                    JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
+                                                    WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
+                    ELSE 'No asignado'
+                END AS devuelto_por,
+                d.tipo
         FROM devolucion d
         JOIN detalle_devolucion dd ON d.devolucion_id = dd.devolucion_id
         JOIN producto pr ON dd.producto_id = pr.producto_id
@@ -89,17 +89,14 @@ $devoluciones = $stmt->fetchAll();
           <div class="text-warning">Administrador</div>
         <?php endif; ?>
       </div>
-      <a href="#">Gestión de Productos</a>
-      <a href="#">Gestión de Usuarios</a>
-      <a href="#" class="active">Gestión de Existencias</a>
-      <div class="ps-3">
+      <a href="gestion_catalogo_categorias.php">Gestión de Catálogo</a>
+      <a href="gestion_usuarios.php">Gestión de Usuarios</a>
+      <a href="gestion_existencias_devoluciones.php" class="active">Gestión de Existencias</a> <div class="ps-3">
         <a href="gestion_existencias_pedidos.php">Pedidos</a>
         <a href="gestion_existencias_ventas.php">Ventas</a>
-        <a href="#" class="active">Devoluciones</a>
-        <a href="gestion_existencias_stock.php">Stock</a>
+        <a href="gestion_existencias_devoluciones.php" class="active">Devoluciones</a> <a href="gestion_existencias_stock.php">Stock</a>
       </div>
-      <a href="#">Configuración</a>
-      <div class="mt-4 text-center">
+      <a href="configuracion.php">Configuración</a> <div class="mt-4 text-center">
         <a href="principal.php" class="btn btn-outline-primary btn-sm w-100">Volver al Inicio</a>
       </div>
     </div>
@@ -107,12 +104,10 @@ $devoluciones = $stmt->fetchAll();
     <div class="col-md-10 content">
       <h3 class="mb-4">Gestión de Existencias - Devoluciones</h3>
 
-      <!-- Botón Generar Devolución -->
       <div class="mb-3">
         <a href="nueva_devolucion.php" class="btn btn-success">+ Generar Devolución</a>
       </div>
 
-      <!-- Formulario de búsqueda -->
       <form class="row g-2 mb-4" method="GET">
         <div class="col-md-3">
           <input type="number" name="devolucion" value="<?= htmlspecialchars($filtroDevolucion) ?>" class="form-control" placeholder="#Devolución">
@@ -170,5 +165,6 @@ $devoluciones = $stmt->fetchAll();
     </div>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

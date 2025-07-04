@@ -91,82 +91,83 @@ $productos = $stmt->fetchAll();
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Gestión de Existencias - Stock</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
+    <meta charset="UTF-8">
+    <title>Gestión de Existencias - Stock</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
 </head>
 <body>
 <div class="container-fluid">
-  <div class="row">
-    <div class="col-md-2 sidebar">
-      <div class="text-center mb-4">
-        <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" width="60" class="mb-2">
-        <div class="fw-bold"><?= htmlspecialchars($nombreCompleto) ?></div>
-        <?php if ($rolUsuario === 'admin'): ?>
-          <div class="text-warning">Administrador</div>
-        <?php endif; ?>
-      </div>
-      <a href="#">Gestión de Productos</a>
-      <a href="#">Gestión de Usuarios</a>
-      <a href="#" class="active">Gestión de Existencias</a>
-      <div class="ps-3">
-        <a href="gestion_existencias_pedidos.php">Pedidos</a>
-        <a href="gestion_existencias_ventas.php">Ventas</a>
-        <a href="gestion_existencias_devoluciones.php">Devoluciones</a>
-        <a href="#" class="active">Stock</a>
-      </div>
-      <a href="#">Configuración</a>
-      <div class="mt-4 text-center">
-        <a href="principal.php" class="btn btn-outline-primary btn-sm w-100">Volver al Inicio</a>
-      </div>
+    <div class="row">
+        <div class="col-md-2 sidebar">
+            <div class="text-center mb-4">
+                <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" width="60" class="mb-2">
+                <div class="fw-bold"><?= htmlspecialchars($nombreCompleto) ?></div>
+                <?php if ($rolUsuario === 'admin'): ?>
+                    <div class="text-warning">Administrador</div>
+                <?php endif; ?>
+            </div>
+            <a href="gestion_catalogo_categorias.php">Gestión de Catálogo</a>
+            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
+            <a href="gestion_existencias_stock.php" class="active">Gestión de Existencias</a> 
+            <div class="ps-3">
+                <a href="gestion_existencias_pedidos.php">Pedidos</a>
+                <a href="gestion_existencias_ventas.php">Ventas</a>
+                <a href="gestion_existencias_devoluciones.php">Devoluciones</a>
+                <a href="gestion_existencias_stock.php" class="active">Stock</a> 
+            </div>
+            <a href="configuracion.php">Configuración</a> 
+            <div class="mt-4 text-center">
+                <a href="principal.php" class="btn btn-outline-primary btn-sm w-100">Volver al Inicio</a>
+            </div>
+        </div>
+
+        <div class="col-md-10 content">
+            <h3 class="mb-4">Gestión de Existencias - Stock</h3>
+
+            <form class="row g-2 mb-4" method="GET">
+                <div class="col-md-4">
+                    <input type="text" name="nombre" value="<?= htmlspecialchars($filtroNombre) ?>" class="form-control" placeholder="Buscar por nombre">
+                </div>
+                <div class="col-md-4">
+                    <input type="text" name="categoria" value="<?= htmlspecialchars($filtroCategoria) ?>" class="form-control" placeholder="Buscar por categoría">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-primary w-100">Buscar</button>
+                </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover text-center">
+                    <thead class=""> <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Marca</th>
+                            <th>Categoría</th>
+                            <th>Stock Disponible</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($productos as $producto): ?>
+                            <tr>
+                                <td><?= $producto['producto_id'] ?></td>
+                                <td><?= htmlspecialchars($producto['nombre']) ?></td>
+                                <td><?= htmlspecialchars($producto['marca']) ?></td>
+                                <td><?= htmlspecialchars($producto['categoria'] ?? 'Sin categoría') ?></td>
+                                <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
+                                    <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : $producto['stock_disponible'] ?>
+                                </td>
+                                <td>
+                                    <a href="detalle_stock.php?producto_id=<?= $producto['producto_id'] ?>" class="btn btn-sm btn-info">Ver detalles</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-
-    <div class="col-md-10 content">
-      <h3 class="mb-4">Gestión de Existencias - Stock</h3>
-
-      <form class="row g-2 mb-4" method="GET">
-        <div class="col-md-4">
-          <input type="text" name="nombre" value="<?= htmlspecialchars($filtroNombre) ?>" class="form-control" placeholder="Buscar por nombre">
-        </div>
-        <div class="col-md-4">
-          <input type="text" name="categoria" value="<?= htmlspecialchars($filtroCategoria) ?>" class="form-control" placeholder="Buscar por categoría">
-        </div>
-        <div class="col-md-4">
-          <button class="btn btn-primary w-100">Buscar</button>
-        </div>
-      </form>
-
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover text-center">
-          <thead class="table-dark">
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Marca</th>
-              <th>Categoría</th>
-              <th>Stock Disponible</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($productos as $producto): ?>
-              <tr>
-                <td><?= $producto['producto_id'] ?></td>
-                <td><?= htmlspecialchars($producto['nombre']) ?></td>
-                <td><?= htmlspecialchars($producto['marca']) ?></td>
-                <td><?= htmlspecialchars($producto['categoria'] ?? 'Sin categoría') ?></td>
-                <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
-                  <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : $producto['stock_disponible'] ?>
-                </td>
-                <td><a href="detalle_stock.php?producto_id=<?= $producto['producto_id'] ?>" class="btn btn-sm btn-outline-info">Ver detalles</a></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 </div>
 </body>
 </html>

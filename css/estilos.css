@@ -1,110 +1,12 @@
 body {
-  background-color: #f3f3f3;
-  font-family: 'Segoe UI', sans-serif;
-  color: #111;
-}
-
-.sidebar {
-  background-color: #232f3e;
-  height: 100vh;
-  padding-top: 20px;
-  border-right: 2px solid #ccc;
-}
-
-.sidebar a {
-  display: block;
-  color: #ddd;
-  padding: 12px 20px;
-  text-decoration: none;
-  transition: background-color 0.3s, color 0.3s;
-}
-
-.sidebar a:hover,
-.sidebar a.active {
-  background-color: #37475a;
-  font-weight: bold;
-}
-
-.content {
-  padding: 40px;
-  min-height: 100vh;
-}
-
-h3 {
-  color: #232f3e;
-  font-weight: bold;
-}
-
-.form-control {
-  background-color: #fff;
-  border: 1px solid #ccc;
-  color: #111;
-}
-
-.form-control::placeholder {
-  color: #888;
-}
-
-.btn-primary {
-  background-color: #febd69;
-  border: none;
-  color: #111;
-  font-weight: bold;
-}
-
-.btn-primary:hover {
-  background-color: #f3a847;
-}
-
-.btn-info {
-  background-color: #17c0eb;
-  border: none;
-  color: #000;
-}
-
-.btn-info:hover {
-  background-color: #00a8cc;
-}
-
-.table {
-  background-color: #fff;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.table thead {
-  background-color: #232f3e;
-  color: #fff;
-}
-
-.table th,
-.table td {
-  vertical-align: middle;
-  border: 1px solid #ddd;
-  color: #111;
-}
-
-.badge-success {
-  background-color: #2ecc71;
-  color: white;
-}
-
-.badge-warning {
-  background-color: #e67e22;
-  color: white;
-}
-
-/* === Estilo general tipo Amazon === */
-body {
-  background-color: #f3f3f3;
+  background-color: #EAEDED; /* Amazon light grey background */
   font-family: 'Segoe UI', sans-serif;
   color: #111;
   margin: 0;
 }
 
-/* Sidebar Amazon */
 .sidebar {
-  background-color: #232f3e;
+  background-color: #131921; /* Amazon dark blue/black */
   min-height: 100vh;
   padding-top: 20px;
   color: white;
@@ -113,7 +15,7 @@ body {
 
 .sidebar a {
   display: block;
-  color: #ddd;
+  color: #DDDDDD; /* Lighter grey for links */
   padding: 12px 20px;
   text-decoration: none;
   transition: background-color 0.3s, color 0.3s;
@@ -121,7 +23,7 @@ body {
 
 .sidebar a:hover,
 .sidebar a.active {
-  background-color: #37475a;
+  background-color: #565E6B; /* Darker grey/blue on hover/active */
   color: #fff;
   font-weight: bold;
 }
@@ -131,7 +33,7 @@ body {
   font-size: 0.95rem;
 }
 
-/* Caja de usuario */
+/* User box styling */
 .user-box {
   text-align: center;
   margin-bottom: 30px;
@@ -143,7 +45,7 @@ body {
   margin-bottom: 10px;
 }
 
-/* Contenido principal */
+/* Main content styling */
 .content {
   padding: 40px;
 }
@@ -151,15 +53,15 @@ body {
 .main-title {
   font-size: 28px;
   margin-bottom: 30px;
-  color: #232f3e;
+  color: #131921; /* Dark blue/black for titles */
   font-weight: bold;
 }
 
-/* Tarjetas tipo Amazon Seller */
+/* Card styling (Amazon Seller style) */
 .card {
-  background-color: #ffffff;
+  background-color: #ffffff; /* White card background */
   color: #111;
-  border: 1px solid #ddd;
+  border: 1px solid #D5D9D9; /* Light border */
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   transition: transform 0.2s, box-shadow 0.3s;
@@ -175,6 +77,149 @@ body {
   margin-bottom: 10px;
 }
 
-.text-danger {
+.card-header {
+  background-color: #131921 !important; /* Amazon dark blue/black header */
+  color: #f8f9fa !important;
   font-weight: bold;
+  border-bottom: 1px solid #D5D9D9;
+}
+
+
+.form-control, .form-select {
+  background-color: #ffffff;
+  border: 1px solid #D5D9D9;
+  color: #111;
+}
+
+.form-control::placeholder {
+  color: #888;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #F3A847; /* Amazon orange focus */
+  box-shadow: 0 0 0 0.25rem rgba(243, 168, 71, 0.25);
+}
+
+.btn-primary {
+  background-color: #FEBD69; /* Amazon orange */
+  border-color: #F3A847;
+  color: #111; /* Dark text on orange */
+  font-weight: bold;
+}
+
+.btn-primary:hover {
+  background-color: #F3A847; /* Slightly darker orange on hover */
+  border-color: #FF8F00;
+}
+
+.btn-warning {
+  background-color: #E77600; /* Darker orange for warning */
+  border-color: #DA7000;
+  color: #fff;
+  font-weight: bold;
+}
+
+.btn-warning:hover {
+  background-color: #DA7000;
+  border-color: #C06100;
+}
+
+.btn-info {
+  background-color: #232F3E; /* Dark blue for info */
+  border: none;
+  color: #fff;
+}
+
+.btn-info:hover {
+  background-color: #131921;
+}
+
+.table {
+  background-color: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.table thead {
+  background-color: #232f3e; /* Dark blue for table header */
+  color: #fff;
+}
+
+.table th,
+.table td {
+  vertical-align: middle;
+  border: 1px solid #ddd;
+  color: #111;
+}
+
+.badge-success {
+  background-color: #2ecc71; /* Green */
+  color: white;
+}
+
+.badge-warning {
+  background-color: #e67e22; /* Orange */
+  color: white;
+}
+
+/* --- Dark Mode Styles (Amazon inspired) --- */
+body.dark-mode {
+  background-color: #1A202A; /* Darker background */
+  color: #E0E0E0; /* Lighter text */
+}
+
+body.dark-mode .sidebar {
+  background-color: #212A36; /* Slightly lighter dark sidebar */
+}
+
+body.dark-mode .content {
+  background-color: #343D48; /* Darker content area */
+  color: #E0E0E0;
+}
+
+body.dark-mode .main-title {
+  color: #E0E0E0;
+}
+
+body.dark-mode .card {
+  background-color: #2B333F; /* Darker card background */
+  border-color: #4A525E;
+}
+
+body.dark-mode .card-header {
+  background-color: #212A36 !important; /* Darker card header */
+  color: #E0E0E0 !important;
+}
+
+body.dark-mode .form-control,
+body.dark-mode .form-select {
+  background-color: #3A4452; /* Darker input fields */
+  color: #E0E0E0;
+  border-color: #4A525E;
+}
+
+body.dark-mode .form-control::placeholder {
+  color: #A0A0A0;
+}
+
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus {
+  background-color: #4A525E;
+  color: #E0E0E0;
+  border-color: #FEBD69; /* Amazon orange focus for dark mode */
+  box-shadow: 0 0 0 0.25rem rgba(254, 189, 105, 0.25);
+}
+
+body.dark-mode .table {
+  background-color: #2B333F;
+}
+
+body.dark-mode .table thead {
+  background-color: #212A36;
+}
+
+body.dark-mode .table th,
+body.dark-mode .table td {
+  border-color: #4A525E;
+  color: #E0E0E0;
 }

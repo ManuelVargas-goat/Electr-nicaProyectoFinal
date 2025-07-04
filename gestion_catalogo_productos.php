@@ -9,14 +9,25 @@ if (!isset($_SESSION['usuario'])) {
 
 $usuario = $_SESSION['usuario'];
 
-// Obtener datos del usuario
-$sql = "SELECT per.nombre, per.apellido_paterno FROM usuario_empleado ue 
-        JOIN persona per ON ue.persona_id = per.persona_id 
+// Obtener datos del usuario, incluyendo el rol
+$sql = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol FROM usuario_empleado ue
+        JOIN persona per ON ue.persona_id = per.persona_id
+        JOIN rol r ON ue.rol_id = r.rol_id
         WHERE ue.usuario = :usuario";
+
 $stmt = $pdo->prepare($sql);
 $stmt->execute([':usuario' => $usuario]);
-$usuarioActual = $stmt->fetch();
-$nombreUsuario = $usuarioActual ? $usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno'] : 'Nom_Usuario';
+
+$usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC); // Fetch as associative array for easier access
+
+$nombreUsuario = 'Usuario'; // Default
+$rolUsuario = ''; // Default
+
+if ($usuarioActual) {
+    $nombreUsuario = $usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno'];
+    // Convert the role from the database to lowercase for comparison
+    $rolUsuario = strtolower($usuarioActual['rol']);
+}
 
 // Obtener categorías para el filtro
 $categoriasLista = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre")->fetchAll();
@@ -24,6 +35,10 @@ $categoriasLista = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER
 // Parámetros de filtro
 $busqueda = $_GET['buscar'] ?? '';
 $categoriaFiltrada = $_GET['categoria'] ?? '';
+
+// Mensajes de operación (éxito/error)
+$mensaje = $_GET['mensaje'] ?? '';
+$claseMensaje = $_GET['tipo'] ?? ''; // 'success' o 'danger'
 
 // Consulta dinámica
 $where = [];
@@ -57,95 +72,110 @@ $productos = $stmt->fetchAll();
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Gestión de Productos</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
+    <meta charset="UTF-8">
+    <title>Gestión de Productos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
 </head>
 <body>
 <div class="container-fluid">
-  <div class="row">
-    <!-- Sidebar -->
-    <div class="col-md-2 sidebar">
-      <div class="user-box">
-        <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" class="mb-2">
-        <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
-      </div>
-      <a href="#" class="active">Gestión de Productos</a>
-      <div class="submenu">
-        <a href="gestion_catalogo_categorias.php">Categorías</a>
-        <a href="gestion_catalogo_productos.php" class="active">Productos</a>
-        <a href="gestion_catalogo_proveedores.php">Proveedores</a>
-      </div>
-      <a href="gestion_usuarios.php">Gestión de Usuarios</a>
-      <a href="gestion_existencias_stock.php">Gestión de Existencias</a>
-      <a href="configuracion.php">Configuración</a>
-    </div>
+    <div class="row">
+        <div class="col-md-2 sidebar">
+            <div class="user-box text-center mb-4">
+                <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
 
-    <!-- Contenido -->
-    <div class="col-md-10 content">
-      <h3 class="main-title">Gestión de Productos</h3>
-      <a href="nuevo_producto.php" class="btn btn-primary mb-3">+ Agregar Producto</a>
+                <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
 
-      <!-- Formulario de búsqueda -->
-      <form method="GET" class="row mb-4 g-2">
-        <div class="col-md-4">
-          <input type="text" name="buscar" class="form-control" placeholder="Buscar por ID o Nombre" value="<?= htmlspecialchars($busqueda) ?>">
-        </div>
-        <div class="col-md-4">
-          <select name="categoria" class="form-select">
-            <option value="">-- Todas las Categorías --</option>
-            <?php foreach ($categoriasLista as $cat): ?>
-              <option value="<?= $cat['categoria_id'] ?>" <?= $categoriaFiltrada == $cat['categoria_id'] ? 'selected' : '' ?>>
-                <?= htmlspecialchars($cat['nombre']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="col-md-2 d-grid">
-          <button type="submit" class="btn btn-primary">Buscar</button>
-        </div>
-        <div class="col-md-2 d-grid">
-          <a href="gestion_catalogo_productos.php" class="btn btn-secondary">Limpiar</a>
-        </div>
-      </form>
+                <div class="<?= ($rolUsuario === 'admin') ? 'text-warning' : 'text-light' ?> small">
+                    <?= ucfirst($rolUsuario === 'admin' ? 'administrador' : $rolUsuario) ?>
+                </div>
+            </div>
 
-      <!-- Tabla -->
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover text-center">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Descripción</th>
-              <th>Marca</th>
-              <th>Precio (S/)</th>
-              <th>Categoría</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($productos as $prod): ?>
-              <tr>
-                <td><?= $prod['producto_id'] ?></td>
-                <td><?= htmlspecialchars($prod['nombre']) ?></td>
-                <td><?= htmlspecialchars($prod['descripcion']) ?></td>
-                <td><?= htmlspecialchars($prod['marca']) ?></td>
-                <td><?= number_format($prod['precio'], 2) ?></td>
-                <td><?= htmlspecialchars($prod['categoria'] ?? 'Sin categoría') ?></td>
-                <td>
-                  <a href="editar_producto.php?id=<?= $prod['producto_id'] ?>" class="btn btn-sm btn-info">Editar</a>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-            <?php if (empty($productos)): ?>
-              <tr><td colspan="7">No se encontraron productos.</td></tr>
+            <a href="#" class="active">Gestión de Catálogo</a>
+            <div class="submenu">
+                <a href="gestion_catalogo_categorias.php">Categorías</a>
+                <a href="gestion_catalogo_productos.php" class="active">Productos</a>
+                <a href="gestion_catalogo_proveedores.php">Proveedores</a>
+            </div>
+            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
+            <a href="gestion_existencias_pedidos.php">Gestión de Existencias</a>
+            <a href="configuracion.php">Configuración</a>
+
+            <div class="mt-4">
+                <a href="principal.php" class="btn btn-outline-primary w-100">Volver al inicio</a>
+            </div>
+        </div>
+
+        <div class="col-md-10 content">
+            <h3 class="main-title">Gestión de Productos</h3>
+            <a href="nuevo_producto.php" class="btn btn-primary mb-3">+ Agregar Producto</a>
+
+            <?php if ($mensaje): ?>
+                <div class="alert alert-<?= htmlspecialchars($claseMensaje) ?> alert-dismissible fade show" role="alert">
+                    <?= htmlspecialchars($mensaje) ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                </div>
             <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
+
+            <form method="GET" class="row mb-4 g-2">
+                <div class="col-md-4">
+                    <input type="text" name="buscar" class="form-control" placeholder="Buscar por ID o Nombre" value="<?= htmlspecialchars($busqueda) ?>">
+                </div>
+                <div class="col-md-4">
+                    <select name="categoria" class="form-select">
+                        <option value="">Todas las Categorías</option>
+                        <?php foreach ($categoriasLista as $cat): ?>
+                            <option value="<?= $cat['categoria_id'] ?>" <?= $categoriaFiltrada == $cat['categoria_id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cat['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary">Buscar</button>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <a href="gestion_catalogo_productos.php" class="btn btn-secondary">Limpiar</a>
+                </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover text-center">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Marca</th>
+                            <th>Precio (S/)</th>
+                            <th>Categoría</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($productos as $prod): ?>
+                            <tr>
+                                <td><?= $prod['producto_id'] ?></td>
+                                <td><?= htmlspecialchars($prod['nombre']) ?></td>
+                                <td><?= htmlspecialchars($prod['descripcion']) ?></td>
+                                <td><?= htmlspecialchars($prod['marca']) ?></td>
+                                <td><?= number_format($prod['precio'], 2) ?></td>
+                                <td><?= htmlspecialchars($prod['categoria'] ?? 'Sin categoría') ?></td>
+                                <td>
+                                    <a href="editar_producto.php?id=<?= $prod['producto_id'] ?>" class="btn btn-sm btn-info me-2">Editar</a>
+                                    <a href="eliminar_producto.php?id=<?= $prod['producto_id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('¿Está seguro de que desea eliminar este producto?');">Eliminar</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($productos)): ?>
+                            <tr><td colspan="7">No se encontraron productos.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

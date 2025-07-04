@@ -1,6 +1,6 @@
 <?php
 session_start();
-include("config.php");
+include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
 $mensaje = '';
 
@@ -8,16 +8,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $usuario = $_POST['usuario'];
     $clave = $_POST['clave'];
 
+    // ¡CORRECCIÓN AQUÍ!
+    // Encriptar la clave ingresada por el usuario con MD5 para que coincida con la de la base de datos.
+    $clave_hashed = md5($clave); 
+
     // Consulta con JOIN a la tabla rol
     $sql = "SELECT ue.usuario, ue.clave, r.nombre AS rol
             FROM usuario_empleado ue
             JOIN rol r ON ue.rol_id = r.rol_id
-            WHERE ue.usuario = :usuario AND ue.clave = :clave AND ue.estado = TRUE";
+            WHERE ue.usuario = :usuario AND ue.clave = :clave_hashed AND ue.estado = TRUE"; // Usar $clave_hashed
     
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
         ':usuario' => $usuario,
-        ':clave' => $clave
+        ':clave_hashed' => $clave_hashed // Pasar la clave encriptada
     ]);
 
     if ($stmt->rowCount() == 1) {
@@ -74,10 +78,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="d-grid">
                 <button type="submit" class="btn btn-primary">INGRESAR</button>
             </div>
-        </form>
-        <div class="text-end mt-3">
-            <a href="recuperar.php" class="text-info text-decoration-none">Forgot Password?</a>
-        </div>
+            <div class="text-end mt-3">
+                <a href="recuperar_cuenta.php" class="text-info text-decoration-none">Forgot Password?</a>
+            </div>
     </div>
 </body>
 </html>
