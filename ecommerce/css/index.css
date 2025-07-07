@@ -1,0 +1,69 @@
+
+.icontable {
+  width: 50px;
+  height: auto;
+
+
+}
+
+body {
+  background-color: #EAEDED; /* Amazon light grey background */
+  font-family: 'Segoe UI', sans-serif;
+  color: #111;
+  margin: 0;
+}
+
+.sidebar {
+  max-width: 300px;
+  background-color: #e8e8e8  ; 
+  margin-left: 200px;
+  color: white;
+  border: 2px solid #ccc;
+}
+
+.container-fluid{
+
+  margin-top: 30px;
+}
+
+  
+
+  /* Contenido principal que ocupa el resto del espacio */
+  main {
+    flex: 1;
+  }
+
+.login-box {
+            max-width: 500px;
+            margin: 80px auto;
+            padding: 30px;
+            border: 1px solid #adacc0;
+            border-radius: 8px;
+            background-color: #EAEDED ;
+  }
+
+.register-box h2 {
+    margin: 0;
+    background-color: #f1f1f1;
+    padding: 30px;
+  }
+
+.register-box form {
+    padding: 30px;
+  }
+
+.register-box {
+            max-width: 900px;
+            margin: 80px auto;
+            border: 1px solid #adacc0;
+            border-radius: 8px;
+            background-color: #EAEDED;
+  }
+
+.gestioncliente-box {
+
+  max-width: 1000px;
+  border: 1px solid #adacc0;
+  border-radius: 8px
+
+  }

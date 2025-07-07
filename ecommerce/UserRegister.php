@@ -1,21 +1,78 @@
 <?php
 include("config.php");
 
-$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
+$success_message = '';
+$error_message = '';
 
-if ($productos != null){
-     foreach ($productos as $clave => $cantidad){
+if($_SERVER['REQUEST_METHOD'] === 'POST'){
 
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
-                              From producto pr
-                              WHERE pr.producto_id=? AND descontinuado= false ");
-        $sql->execute([$clave]);
-        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
+   $nombres = trim($_POST['nombres'] ?? '');
+   $apellidopat = trim($_POST['apellidopat'] ?? '');
+   $apellidomat = trim($_POST['apellidomat'] ?? '');
+   $sexo = $_POST['sexo']; 
+   $fechanac = $_POST['fechanac']; 
+   $direccion = trim($_POST['direccion'] ?? '');
+   $telefono = trim($_POST['telefono'] ?? '');
+   $email = trim($_POST['email'] ?? '');
 
-     }
+   $usuario = trim($_POST['usuario'] ?? '');
+   $password = trim($_POST['password'] ?? '');
+   $repassword = trim($_POST['repassword'] ?? '');
 
+   if (empty($nombres) || empty($apellidopat)|| empty($apellidomat) || empty($email) || empty($telefono) || empty($direccion) || empty($fechanac) || empty($sexo) ||
+        empty($usuario) || empty($password) || empty($repassword)) {
+        $error_message = "Todos los campos obligatorios deben ser completados.";
+    } elseif ($password !== $repassword) {
+        $error_message = "Las contraseñas no coinciden.";
+    } else {
+        try {
+
+            // Iniciar transacción
+            $pdo->beginTransaction();
+
+             // 1. Insertar en la tabla persona
+            $sql_persona = "INSERT INTO persona (nombre, apellido_paterno, apellido_materno, fecha_nacimiento, sexo, email, direccion, telefono) VALUES (:nombre, :apellido_paterno, :apellido_materno, :fecha_nacimiento, :sexo, :email, :direccion, :telefono)";
+            $stmt_persona = $pdo->prepare($sql_persona);
+            $stmt_persona->execute([
+                ':nombre' => $nombres,
+                ':apellido_paterno' => $apellidopat,
+                ':apellido_materno' => $apellidomat,
+                ':fecha_nacimiento' => $fechanac,
+                ':sexo' => $sexo,
+                ':email' => $email,
+                ':direccion' => $direccion,
+                ':telefono' => $telefono
+            ]);
+            $persona_id = $pdo->lastInsertId(); // Obtener el ID de la persona recién insertada
+
+            $sql_empleado = "INSERT INTO usuario_cliente (usuario, clave, rol, persona_id) VALUES (:usuario, :clave, :rol, :persona_id)";
+            $stmt_empleado = $pdo->prepare($sql_empleado);
+            $stmt_empleado->execute([
+                ':usuario' => $usuario,
+                ':clave' => $password,
+                ':rol' => 'cliente',
+                ':persona_id' => $persona_id
+            ]);
+
+            $pdo->commit(); // Confirmar la transacción
+            $success_message = "Usuario agregado correctamente.";
+            // Redirigir a la página de gestión de empleados después de un éxito
+            header("Location: UserRegistroPedido.php?agregado=ok");
+            exit();
+        } catch (PDOException $e) {
+            $pdo->rollBack(); // Revertir la transacción en caso de error
+            // Manejo de errores específicos de base de datos
+            if ($e->getCode() === '23505') { // Código de error para violación de unique constraint (ej. usuario o email ya existen)
+                $error_message = "El nombre de usuario o el email ya existen. Por favor, elija otros.";
+            } else {
+                $error_message = "Error de base de datos al agregar empleado: " . $e->getMessage();
+            }
+        } catch (Exception $e) {
+            $pdo->rollBack(); // Revertir la transacción en caso de error de lógica
+            $error_message = "Error: " . $e->getMessage();
+        }
+    }
 }
-
 ?>
 
 
@@ -32,7 +89,9 @@ if ($productos != null){
      <link rel="stylesheet" href="css/index.css">
 
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  </head>
+      
+
+    </head>
 
 <!-- Nav Bar Redes-->
     <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
@@ -71,6 +130,7 @@ if ($productos != null){
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -87,153 +147,64 @@ if ($productos != null){
 
 <body>
 
-<div class="container">
-    <br><br>
-    <div class="table-responsive" >
-        <table class="table" style="text-align: center;">
-            <thead>
-                <tr>
-                    <th>Imagen</th>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if(empty($lista_carrito)){
-                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                } else {
-                    $total = 0;
-                    foreach($lista_carrito as $producto){
-                        
-                        $_id = $producto['id'];
-                        $nombre = $producto ['nombre'];
-                        $precio = $producto['precio'];
-                        $cantidad = $producto['cantidad'];
-                        $subtotal= $cantidad * $precio;
-                        $total += $subtotal;
-                     ?>
-                <tr>
+ <div class="register-box">
+    <h2>Ingrese sus datos</h2>
 
-                    <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                        <img class="icontable" style="width: 100px; height: auto;" 
-                        src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>" >
-                    </a></td>
-
-                    <td><?php echo $nombre; ?></td>
-
-                    <td><?php echo $precio; ?></td>
-
-                    <td>
-                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
-                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
-                    </td>
-
-                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
-                    </td>
-
-                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
-                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
-                </tr>
-               <?php } ?>
-
-               <tr>
-                <td colspan="4"></td>
-                <td colspan="2">
-                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
-                </td>
-               </tr>
-            </tbody>
-            <?php } ?>
-        </table>
-        </div>
-
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
-                </div>
-            </div>
-        <?php } ?>
+ <form class="row g-3" action="UserRegister.php" method="post" autocomplete="of">
+    <div class="col-md-6">
+        <label for="nombre">Nombre <span class="text-danger">*</span></label>
+        <input type="text" name="nombres" id="nombres" class="form-control" required>
     </div>
-    
-    
+    <div class="col-md-6">
+        <label for="apellidopat">Apellido Paterno y Materno <span class="text-danger">*</span></label>
+        <div class="input-group">
+            <input type="text" name="apellidopat" id="apellidopat" class="form-control" required>
+            <input type="text" name="apellidomat" id="apellidomat" class="form-control" required>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <label for="sexo">Sexo <span class="text-danger">*</span></label>
+        <select name="sexo" id="sexo"  class="form-select" required>
+            <option value="H" selected>Hombre</option>
+            <option value="M">Mujer</option>
+            <option value="S">No especifica</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="fechanac">Fecha de Nacimiento<span class="text-danger">*</span></label>
+        <input type="date" name="fechanac" id="fechanac" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+        <label for="direccion">Direccion</label>
+        <input type="text" name="direccion" id="direccion" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+        <label for="telefono">Telefono <span class="text-danger">*</span></label>
+        <input type="text" name="telefono" id="telefono" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+        <label for="email">Email <span class="text-danger">*</span></label>
+        <input type="email" name="email" id="email" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+        <label for="usuario">Usuario <span class="text-danger">*</span></label>
+        <input type="text" name="usuario" id="usuario" class="form-control" required>
+    </div>
+    <div class="col-md-6 ">
+        <label for="password">Contraseña<span class="text-danger">*</span></label>
+        <input type="password" name="password" id="password" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+        <label for="repassword">Confirmar Contraseña<span class="text-danger">*</span></label>
+        <input type="password" name="repassword" id="repassword" class="form-control" required>
+    </div>
+   <div class="col-12">
+        <button type="submit" class="btn btn-primary">Registrarse</button>
+   </div>
 
-    <br><br>
+ </form>
 
-
-     <!-- Script Contador de Productos en Carrito -->
-    <script>
-       
-        function actualizaCantidad(cantidad,id){
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','agregar') 
-            formData.append('id',id)         
-            formData.append('cantidad',cantidad)  
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    let divsubtotal = document.getElementById("subtotal_" + id)
-                    divsubtotal.innerHTML = data.sub
-
-                    let total = 0.00
-                    let list = document.getElementsByName('subtotal[]')
-
-
-                    for(let i = 0; i < list.length; i++){
-
-                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
-                        
-                    }
-              console.log(total)    
-                    total = new Intl.NumberFormat('en-US',{
-                        minimumFractionDigits: 2
-                    }).format(total)
-                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
-
-                }else{console.log('Error')}
-            })
-        }
-
-        function EliminarProducto(id){
-
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','eliminar') 
-            formData.append('id',id)        
-
-            console.log(id)
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    location.reload()
-
-
-                }else{console.log('Error')}
-            })
-        }
-
-
-    </script>
-
-
-</div>
-
+ </div>
 
 </body>
   

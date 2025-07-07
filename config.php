@@ -13,8 +13,6 @@ try {
     die();
 }
 
- // Inicio de sesion
-
  // Contador de Productos en Carrito
 
 $num_cart = 0;

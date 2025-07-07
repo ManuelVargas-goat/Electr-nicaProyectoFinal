@@ -1,6 +1,13 @@
 <?php
 include("config.php");
 
+if (!isset($_SESSION['usuario'])) {
+    header('Location: UserLogin.php');
+    exit();
+}
+
+$usuario = $_SESSION['usuario'];
+
 $productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
 
 if ($productos != null){
@@ -14,6 +21,50 @@ if ($productos != null){
 
      }
 
+} else {
+    header("Location: Inicio_Principal.php");
+    exit;
+}
+
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $productoIds = $_POST['producto_id'];
+    $proveedorIds = $_POST['proveedor_id'];
+    $cantidades = $_POST['cantidad'];
+    $precios = $_POST['precio_unidad'];
+
+    if ($productoIds && $cantidades && $precios && $proveedorIds) {
+        $pdo->beginTransaction();
+
+        try {
+            // USAR NOW() en lugar de CURRENT_DATE
+            $stmt = $pdo->prepare("INSERT INTO compra (usuario_cliente_id,fecha_compra,almacen_id)
+                                   VALUES (:usuario_id,NOW(), '1' ) RETURNING compra_id");
+            $stmt->execute([':usuario_id' => $usuarioClienteId]);
+            $pedidoId = $stmt->fetchColumn();
+            
+            $stmt = $pdo->prepare("INSERT INTO detalle_compra 
+                (compra_id, producto_id, proveedor_id, cantidad, precio_unidad, descuento)
+                VALUES (:compra_id, :producto_id, :proveedor_id, :cantidad, :precio, 0)");
+
+            for ($i = 0; $i < count($productoIds); $i++) {
+                $stmt->execute([
+                    ':compra_id' => $pedidoId,
+                    ':producto_id' => $productoIds[$i],
+                    ':proveedor_id' => $proveedorIds[$i],
+                    ':cantidad' => $cantidades[$i],
+                    ':precio' => $precios[$i]
+                ]);
+            }
+
+            $pdo->commit();
+            header("Location: Pagina_Principal.php");
+            exit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            die("Error al registrar pedido: " . $e->getMessage());
+        }
+    }
 }
 
 ?>
@@ -89,16 +140,14 @@ if ($productos != null){
 
 <div class="container">
     <br><br>
+
     <div class="table-responsive" >
         <table class="table" style="text-align: center;">
             <thead>
                 <tr>
                     <th>Imagen</th>
                     <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
                     <th>Subtotal</th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -124,25 +173,15 @@ if ($productos != null){
 
                     <td><?php echo $nombre; ?></td>
 
-                    <td><?php echo $precio; ?></td>
-
-                    <td>
-                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
-                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
-                    </td>
-
                     <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
                     </td>
 
-                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
-                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
                 </tr>
                <?php } ?>
 
                <tr>
-                <td colspan="4"></td>
-                <td colspan="2">
-                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
+                <td colspan="4">
+                    <p class="h3 text-end" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
                 </td>
                </tr>
             </tbody>
@@ -150,13 +189,8 @@ if ($productos != null){
         </table>
         </div>
 
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
-                </div>
-            </div>
-        <?php } ?>
+    <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
+
     </div>
     
     
@@ -164,71 +198,8 @@ if ($productos != null){
     <br><br>
 
 
-     <!-- Script Contador de Productos en Carrito -->
     <script>
        
-        function actualizaCantidad(cantidad,id){
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','agregar') 
-            formData.append('id',id)         
-            formData.append('cantidad',cantidad)  
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    let divsubtotal = document.getElementById("subtotal_" + id)
-                    divsubtotal.innerHTML = data.sub
-
-                    let total = 0.00
-                    let list = document.getElementsByName('subtotal[]')
-
-
-                    for(let i = 0; i < list.length; i++){
-
-                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
-                        
-                    }
-              console.log(total)    
-                    total = new Intl.NumberFormat('en-US',{
-                        minimumFractionDigits: 2
-                    }).format(total)
-                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
-
-                }else{console.log('Error')}
-            })
-        }
-
-        function EliminarProducto(id){
-
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','eliminar') 
-            formData.append('id',id)        
-
-            console.log(id)
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    location.reload()
-
-
-                }else{console.log('Error')}
-            })
-        }
-
-
     </script>
 
 

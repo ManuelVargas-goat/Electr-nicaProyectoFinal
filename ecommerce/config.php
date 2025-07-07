@@ -14,7 +14,7 @@ try {
 }
 
  // Inicio de sesion
-
+session_start();
  // Contador de Productos en Carrito
 
 $num_cart = 0;

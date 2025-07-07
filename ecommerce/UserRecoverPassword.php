@@ -1,19 +1,32 @@
 <?php
 include("config.php");
 
-$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
+$mensaje = '';
+$codigo_enviado = false;
 
-if ($productos != null){
-     foreach ($productos as $clave => $cantidad){
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $correo = $_POST['email'];
+    $codigo = rand(100000, 999999);
 
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
-                              From producto pr
-                              WHERE pr.producto_id=? AND descontinuado= false ");
-        $sql->execute([$clave]);
-        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
+    $sql = "SELECT p.persona_id, uc.usuario FROM persona p
+            JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
+            WHERE p.email = :correo";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':correo' => $correo]);
+    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-     }
+    if ($usuario) {
 
+        $_SESSION['codigo_verificacion'] = $codigo;
+        $_SESSION['usuario_para_reset'] = $usuario['usuario'];
+
+
+
+        $mensaje = "✅ Código enviado al correo (simulado: <b>$codigo</b>)";
+        $codigo_enviado = true;
+    } else {
+        $mensaje = "❌ Correo no encontrado.";
+    }
 }
 
 ?>
@@ -32,7 +45,9 @@ if ($productos != null){
      <link rel="stylesheet" href="css/index.css">
 
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  </head>
+      
+
+    </head>
 
 <!-- Nav Bar Redes-->
     <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
@@ -71,6 +86,7 @@ if ($productos != null){
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -87,153 +103,39 @@ if ($productos != null){
 
 <body>
 
-<div class="container">
-    <br><br>
-    <div class="table-responsive" >
-        <table class="table" style="text-align: center;">
-            <thead>
-                <tr>
-                    <th>Imagen</th>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if(empty($lista_carrito)){
-                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                } else {
-                    $total = 0;
-                    foreach($lista_carrito as $producto){
-                        
-                        $_id = $producto['id'];
-                        $nombre = $producto ['nombre'];
-                        $precio = $producto['precio'];
-                        $cantidad = $producto['cantidad'];
-                        $subtotal= $cantidad * $precio;
-                        $total += $subtotal;
-                     ?>
-                <tr>
-
-                    <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                        <img class="icontable" style="width: 100px; height: auto;" 
-                        src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>" >
-                    </a></td>
-
-                    <td><?php echo $nombre; ?></td>
-
-                    <td><?php echo $precio; ?></td>
-
-                    <td>
-                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
-                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
-                    </td>
-
-                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
-                    </td>
-
-                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
-                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
-                </tr>
-               <?php } ?>
-
-               <tr>
-                <td colspan="4"></td>
-                <td colspan="2">
-                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
-                </td>
-               </tr>
-            </tbody>
-            <?php } ?>
-        </table>
-        </div>
-
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
-                </div>
+ <div class="login-box">
+        <h4 class="mb-4 text-center">¿Olvidaste tu contraseña?</h4>
+        <form method="POST">
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" name="email" required>
             </div>
-        <?php } ?>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">Enviar Codigo</button>
+            </div>
+            <div class="text-end mt-3">
+                <p>O  <a href="UserLogin.php" class="text-info text-decoration-none">Retorna al Login</a></p>
+            </div>
+
+        </form>
+
+        <?php if ($codigo_enviado): ?>
+         <form action="UserNewPassword.php" method="POST" class="mt-4">
+            <div class="mb-3">
+                <label for="codigo">Código de Verificación:</label>
+                <input type="text" class="form-control" name="codigo" required>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success">Validar Código</button>
+            </div>
+        </form>
+        <?php endif; ?>
+
+    <?php if ($mensaje): ?>
+        <div class="alert alert-info mt-3"><?= $mensaje ?></div>
+    <?php endif; ?>
+        
     </div>
-    
-    
-
-    <br><br>
-
-
-     <!-- Script Contador de Productos en Carrito -->
-    <script>
-       
-        function actualizaCantidad(cantidad,id){
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','agregar') 
-            formData.append('id',id)         
-            formData.append('cantidad',cantidad)  
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    let divsubtotal = document.getElementById("subtotal_" + id)
-                    divsubtotal.innerHTML = data.sub
-
-                    let total = 0.00
-                    let list = document.getElementsByName('subtotal[]')
-
-
-                    for(let i = 0; i < list.length; i++){
-
-                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
-                        
-                    }
-              console.log(total)    
-                    total = new Intl.NumberFormat('en-US',{
-                        minimumFractionDigits: 2
-                    }).format(total)
-                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
-
-                }else{console.log('Error')}
-            })
-        }
-
-        function EliminarProducto(id){
-
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','eliminar') 
-            formData.append('id',id)        
-
-            console.log(id)
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    location.reload()
-
-
-                }else{console.log('Error')}
-            })
-        }
-
-
-    </script>
-
-
-</div>
-
 
 </body>
   

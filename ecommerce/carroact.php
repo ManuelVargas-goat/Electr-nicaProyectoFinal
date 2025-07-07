@@ -1,5 +1,4 @@
 <?php
-
  // Contador de Productos en Carrito en tiempo real
 
 if (isset($_POST['action'])) {

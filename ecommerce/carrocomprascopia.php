@@ -1,4 +1,5 @@
 <?php
+session_start();
 include("config.php");
 
 $productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
@@ -70,7 +71,7 @@ if ($productos != null){
 
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
-                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                <a href="login.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -87,10 +88,14 @@ if ($productos != null){
 
 <body>
 
-<div class="container">
-    <br><br>
-    <div class="table-responsive" >
-        <table class="table" style="text-align: center;">
+    <div class="container">
+     <br><br>
+        <div class="table-responsive" >
+            <?php if(empty($lista_carrito)){
+                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
+                } else { ?>
+
+            <table class="table" style="text-align: center;">
             <thead>
                 <tr>
                     <th>Imagen</th>
@@ -102,9 +107,7 @@ if ($productos != null){
                 </tr>
             </thead>
             <tbody>
-                <?php if(empty($lista_carrito)){
-                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                } else {
+              <?php
                     $total = 0;
                     foreach($lista_carrito as $producto){
                         
@@ -115,7 +118,7 @@ if ($productos != null){
                         $subtotal= $cantidad * $precio;
                         $total += $subtotal;
                      ?>
-                <tr>
+                    <tr>
 
                     <td> <a href="Producto.php?id=<?php echo $_id; ?>">
                         <img class="icontable" style="width: 100px; height: auto;" 
@@ -139,33 +142,30 @@ if ($productos != null){
                 </tr>
                <?php } ?>
 
-               <tr>
+              <tr>
                 <td colspan="4"></td>
                 <td colspan="2">
                     <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
                 </td>
                </tr>
             </tbody>
-            <?php } ?>
+            
+         
         </table>
-        </div>
-
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
-                </div>
+        <div class="row">
+           <div class="col md-5 offset-md-7 d-grid gap-2">
+           <button class="btn btn-primary btn-lg">Realizar pago</button>
             </div>
+        </div>
         <?php } ?>
-    </div>
-    
-    
 
-    <br><br>
+        </div>
+        
+     <br><br>
 
 
      <!-- Script Contador de Productos en Carrito -->
-    <script>
+     <script>
        
         function actualizaCantidad(cantidad,id){
             let url = "/paginas/Electronica-prueba/carroact.php"
@@ -229,10 +229,10 @@ if ($productos != null){
         }
 
 
-    </script>
+     </script>
 
 
-</div>
+    </div>
 
 
 </body>

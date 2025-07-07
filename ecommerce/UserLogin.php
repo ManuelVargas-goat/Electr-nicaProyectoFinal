@@ -1,19 +1,33 @@
 <?php
 include("config.php");
 
-$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
+$mensaje = '';
 
-if ($productos != null){
-     foreach ($productos as $clave => $cantidad){
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $usuario = $_POST['usuario'];
+    $clave = $_POST['clave'];
 
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
-                              From producto pr
-                              WHERE pr.producto_id=? AND descontinuado= false ");
-        $sql->execute([$clave]);
-        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
+    // Consulta con JOIN a la tabla rol
+    $sql = "SELECT uc.usuario, uc.clave, uc.rol
+            FROM usuario_cliente uc
+            WHERE uc.usuario = :usuario AND uc.clave = :clave"; // Usar $clave_hashed
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':usuario' => $usuario,
+        ':clave' => $clave // Pasar la clave encriptada
+    ]);
 
-     }
+    if ($stmt->rowCount() == 1) {
+        $datos = $stmt->fetch(PDO::FETCH_ASSOC);
+        $_SESSION['usuario'] = $datos['usuario'];
+        $_SESSION['rol'] = $datos['rol']; // ← Guardamos el rol aquí
 
+        header("Location:  UserInfo.php");
+        exit;
+    } else {
+        $mensaje = "❌ Usuario o contraseña incorrectos.";
+    }
 }
 
 ?>
@@ -32,7 +46,9 @@ if ($productos != null){
      <link rel="stylesheet" href="css/index.css">
 
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  </head>
+      
+
+    </head>
 
 <!-- Nav Bar Redes-->
     <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
@@ -71,6 +87,7 @@ if ($productos != null){
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -87,153 +104,26 @@ if ($productos != null){
 
 <body>
 
-<div class="container">
-    <br><br>
-    <div class="table-responsive" >
-        <table class="table" style="text-align: center;">
-            <thead>
-                <tr>
-                    <th>Imagen</th>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if(empty($lista_carrito)){
-                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                } else {
-                    $total = 0;
-                    foreach($lista_carrito as $producto){
-                        
-                        $_id = $producto['id'];
-                        $nombre = $producto ['nombre'];
-                        $precio = $producto['precio'];
-                        $cantidad = $producto['cantidad'];
-                        $subtotal= $cantidad * $precio;
-                        $total += $subtotal;
-                     ?>
-                <tr>
-
-                    <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                        <img class="icontable" style="width: 100px; height: auto;" 
-                        src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>" >
-                    </a></td>
-
-                    <td><?php echo $nombre; ?></td>
-
-                    <td><?php echo $precio; ?></td>
-
-                    <td>
-                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
-                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
-                    </td>
-
-                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
-                    </td>
-
-                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
-                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
-                </tr>
-               <?php } ?>
-
-               <tr>
-                <td colspan="4"></td>
-                <td colspan="2">
-                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
-                </td>
-               </tr>
-            </tbody>
-            <?php } ?>
-        </table>
-        </div>
-
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
-                </div>
+ <div class="login-box">
+        <h4 class="mb-4 text-center">Bienvenido Usuario</h4>
+        <form method="POST">
+            <div class="mb-3">
+                <label for="usuario" class="form-label">Nombre de Usuario</label>
+                <input type="text" class="form-control" id="usuario" name="usuario" required>
             </div>
-        <?php } ?>
+            <div class="mb-3">
+                <label for="clave" class="form-label">Contraseña   
+                    <a href="UserRecoverPassword.php" class="text-info text-end text-decoration-none">¿Olvidaste tu contraseña?</a></label>
+                <input type="password" class="form-control" id="clave" name="clave" required>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary">Ingresar</button>
+            </div>
+        </form>
+        <div class="text-end mt-3">
+            <p>¿Aun no tienes una cuenta?  <a href="UserRegister.php" class="text-info text-decoration-none">Registrate</a></p>
+        </div>
     </div>
-    
-    
-
-    <br><br>
-
-
-     <!-- Script Contador de Productos en Carrito -->
-    <script>
-       
-        function actualizaCantidad(cantidad,id){
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','agregar') 
-            formData.append('id',id)         
-            formData.append('cantidad',cantidad)  
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    let divsubtotal = document.getElementById("subtotal_" + id)
-                    divsubtotal.innerHTML = data.sub
-
-                    let total = 0.00
-                    let list = document.getElementsByName('subtotal[]')
-
-
-                    for(let i = 0; i < list.length; i++){
-
-                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
-                        
-                    }
-              console.log(total)    
-                    total = new Intl.NumberFormat('en-US',{
-                        minimumFractionDigits: 2
-                    }).format(total)
-                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
-
-                }else{console.log('Error')}
-            })
-        }
-
-        function EliminarProducto(id){
-
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','eliminar') 
-            formData.append('id',id)        
-
-            console.log(id)
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    location.reload()
-
-
-                }else{console.log('Error')}
-            })
-        }
-
-
-    </script>
-
-
-</div>
-
 
 </body>
   

@@ -93,7 +93,7 @@ if($id == ''){
 
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
-                <a href="login.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -212,8 +212,11 @@ if($id == ''){
     }
         function addProducto(id){
             let url = "/paginas/Electronica-prueba/comprasact.php"
+            let cantidad = document.getElementById("cantidadprod").textContent;
             let formData = new FormData()
-            formData.append('id',id)         
+            
+            formData.append('id',id) 
+            formData.append('cantidad',cantidad)         
 
 
             fetch(

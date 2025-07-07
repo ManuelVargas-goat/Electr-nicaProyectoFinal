@@ -1,21 +1,46 @@
 <?php
 include("config.php");
 
-$productos = isset($_SESSION['carrito']['productos']) ? $_SESSION['carrito']['productos'] : null;
-
-if ($productos != null){
-     foreach ($productos as $clave => $cantidad){
-
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, $cantidad as cantidad, pr.marca as marca, pr.descripcion as descripcion
-                              From producto pr
-                              WHERE pr.producto_id=? AND descontinuado= false ");
-        $sql->execute([$clave]);
-        $lista_carrito[]=$sql->fetch(PDO::FETCH_ASSOC);
-
-     }
-
+if (!isset($_SESSION['usuario'])) {
+    header("Location: UserLogin.php");
+    exit();
 }
 
+$usuario = $_SESSION['usuario'];
+
+// Obtener datos del usuario actual (nombre y rol) para el sidebar
+$sql = "SELECT per.nombre, per.apellido_paterno, uc.persona_id
+        FROM usuario_cliente uc
+        JOIN persona per ON uc.persona_id = per.persona_id
+        WHERE uc.usuario = :usuario";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute([':usuario' => $usuario]);
+
+$usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC);
+
+print_r($usuarioActual );
+
+$nombreUsuario = 'Usuario'; // Valor por defecto
+$personaId = null;
+
+if ($usuarioActual) {
+    $nombreUsuario = $usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno'];
+    $personaId = $usuarioActual['persona_id'];
+}
+
+// Obtener datos completos de la persona para la configuración del perfil
+$perfilUsuario = [];
+
+if ($personaId) {
+    $sqlPerfil = "SELECT nombre, apellido_paterno, apellido_materno, fecha_nacimiento, sexo, email, direccion, telefono
+                  FROM persona WHERE persona_id = :persona_id";
+    $stmtPerfil = $pdo->prepare($sqlPerfil);
+    $stmtPerfil->execute([':persona_id' => $personaId]);
+    $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
+}
+
+print_r($perfilUsuario['nombre']);
 ?>
 
 
@@ -32,7 +57,18 @@ if ($productos != null){
      <link rel="stylesheet" href="css/index.css">
 
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  </head>
+     <style>
+        .sidebar a {
+            display: block;
+            padding: 8px 15px;
+            color: #0b0b0b;
+            text-decoration: none;
+        }
+
+
+     </style>
+
+    </head>
 
 <!-- Nav Bar Redes-->
     <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
@@ -71,6 +107,7 @@ if ($productos != null){
             <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
 
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
                 <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
 
@@ -87,150 +124,99 @@ if ($productos != null){
 
 <body>
 
-<div class="container">
-    <br><br>
-    <div class="table-responsive" >
-        <table class="table" style="text-align: center;">
-            <thead>
-                <tr>
-                    <th>Imagen</th>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if(empty($lista_carrito)){
-                    echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                } else {
-                    $total = 0;
-                    foreach($lista_carrito as $producto){
-                        
-                        $_id = $producto['id'];
-                        $nombre = $producto ['nombre'];
-                        $precio = $producto['precio'];
-                        $cantidad = $producto['cantidad'];
-                        $subtotal= $cantidad * $precio;
-                        $total += $subtotal;
-                     ?>
-                <tr>
+<div class="container-fluid">
 
-                    <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                        <img class="icontable" style="width: 100px; height: auto;" 
-                        src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>" >
-                    </a></td>
+    <div class="row">
 
-                    <td><?php echo $nombre; ?></td>
+        <div class="col-md-3 sidebar">
+            <div class="user-box text-center mb-4">
+                <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
 
-                    <td><?php echo $precio; ?></td>
+                <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
 
-                    <td>
-                        <input type="number" min="1" max="10" step="1" value="<?php echo $cantidad; ?>" 
-                        size="5" id="cantidad_<?php echo $_id; ?>" onchange="actualizaCantidad(this.value,<?php echo $_id;?>)">
-                    </td>
+            </div>
+            <a href="UserInfo.php">Cuenta</a>
+            <a href="UserRegistroPedido.php">Ordenes</a>
+            <a href="Inicio_Principal.php">Cerrar sesion</a>
 
-                    <td><div id="subtotal_<?php echo $_id; ?>" name="subtotal[]"><?php echo 'S/. ' . number_format($subtotal,2,'.',',') ;?></div>
-                    </td>
-
-                    <td><a type="button" id="eliminar_<?php echo $_id; ?>" 
-                    class="btn btn-danger btn-sm" data-bs-id="<?php echo $_id; ?>" onclick="EliminarProducto(<?php echo $_id;?>)">Eliminar</a></td>
-                </tr>
-               <?php } ?>
-
-               <tr>
-                <td colspan="4"></td>
-                <td colspan="2">
-                    <p class="h3" id="total"><?php echo 'S/. ' . number_format($total,2,'.',',') ;?></p>
-                </td>
-               </tr>
-            </tbody>
-            <?php } ?>
-        </table>
         </div>
 
-        <?php if($lista_carrito != null){ ?>
-            <div class="row">
-                <div class="col md-5 offset-md-7 d-grid gap-2">
-                     <a href="Pago.php" class="btn btn-primary btn-lg">Realizar pago</a>
+
+        <div class="col-md-8 content">
+
+
+            <div>
+                <div class="card">
+                    <div class="card-header bg-light fw-bold">
+                         <h4 class="card-title fw-bold">Datos Personales</h4>
+                    </div>
+                    <div class="card-body">
+                    <h6 class="card-title fw-bold">Nombre</h6>
+                    <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' . 
+                    htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' . 
+                    htmlspecialchars($perfilUsuario['apellido_materno'] ?? '')?></span>
+                    <h6 class="card-title fw-bold">Telefono</h6>
+                    <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
+                    <h6 class="card-title fw-bold">Direccion</h6>
+                    <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
+                    <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
+                    <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
                 </div>
-            </div>
-        <?php } ?>
-    </div>
-    
-    
 
-    <br><br>
-
-
-     <!-- Script Contador de Productos en Carrito -->
-    <script>
-       
-        function actualizaCantidad(cantidad,id){
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','agregar') 
-            formData.append('id',id)         
-            formData.append('cantidad',cantidad)  
-
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    let divsubtotal = document.getElementById("subtotal_" + id)
-                    divsubtotal.innerHTML = data.sub
-
-                    let total = 0.00
-                    let list = document.getElementsByName('subtotal[]')
-
-
-                    for(let i = 0; i < list.length; i++){
-
-                        total += parseFloat(list[i].innerHTML.replace('S/.', ''))
+                <div class="card">
+                    <div class="card-header bg-light fw-bold">
+                         <h4 class="card-title fw-bold">Email</h4>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="card-title fw-bold">Correo Actual</h6>
+                            <span><?= htmlspecialchars($perfilUsuario['email'] ?? '') ?></span>
                         
-                    }
-              console.log(total)    
-                    total = new Intl.NumberFormat('en-US',{
-                        minimumFractionDigits: 2
-                    }).format(total)
-                    document.getElementById('total').innerHTML = '<?php echo 'S/. '; ?>' + total
+                            <h6 class="card-title fw-bold">Cambiar correo inscrito</h6>
+                        <form action="UserInfo.php" method="POST">
 
-                }else{console.log('Error')}
-            })
-        }
+                            <label>Nuevo Correo</label><br>
+                            <input type="email" name="new_email" ><br>
 
-        function EliminarProducto(id){
+                            <label>Confirmar Nuevo Correo</label><br>
+                            <input type="email" name="confirm_email"><br>
 
-            let url = "/paginas/Electronica-prueba/carroact.php"
-            let formData = new FormData()
-            formData.append('action','eliminar') 
-            formData.append('id',id)        
+                            <label>Contraseña</label><br>
+                            <input type="password" name="password" ><br>
+                        
+                            <button type="submit" class="btn btn-primary">Cambiar Correo</button>
+                        </form>
+                    </div>
+                </div>
 
-            console.log(id)
+                    <div class="card-header bg-light fw-bold">
+                         <h4 class="card-title fw-bold">Contraseña</h4>
+                    </div>
+                    <div class="card-body">
 
-            fetch(
-                url,
-                {
-                method:'POST',
-                body: formData,   
-                mode: 'cors',     
-            }).then(response=>response.json()).then((data) => {
-                if(data.ok){
-                    location.reload()
+                            <h6 class="card-title fw-bold">Cambiar Contraseña</h6>
+                        <form action="UserInfo.php" method="POST">
 
+                            <label>Contraseña Actual</label><br>
+                            <input type="password" name="actual_password" ><br>
 
-                }else{console.log('Error')}
-            })
-        }
+                            <label>Confirmar Nueva Contraseña</label><br>
+                            <input type="password" name="new_password"><br>
 
+                            <label>Confirmar Nueva Contraseña</label><br>
+                            <input type="password" name="renew_password" ><br>
+                        
+                            <button type="submit" class="btn btn-primary">Cambiar Contraseña</button>
+                        </form>
+                    </div>
+                </div>
+                    
+            </div>
 
-    </script>
+        </div>
+        
+        </div>
 
+    </div>
 
 </div>
 
