@@ -246,7 +246,7 @@ if($id == ''){
 
   
 <!-- Inicio Footer -->
-    <footer class="bg-dark" id="tempaltemo_footer">
+    <footer class="bg-dark" id="footer">
         <div class="container">
             <div class="row">
 

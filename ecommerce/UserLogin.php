@@ -3,7 +3,12 @@ include("config.php");
 
 $mensaje = '';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+
+if (isset($_SESSION['usuario'])) {
+    header('Location: UserInfo.php');
+    exit();
+} else if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    
     $usuario = $_POST['usuario'];
     $clave = $_POST['clave'];
 
@@ -50,8 +55,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     </head>
 
+<header id="header">     
 <!-- Nav Bar Redes-->
-    <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
+ <div class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg bg-dark navbar-light">
         <div class="container text-light">
             <div class="w-100 d-flex justify-content-between">
                 <div>
@@ -68,10 +75,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         </div>
     </nav>
+  </div>
 <!-- Nav Bar Redes-->
 
 <!-- Header -->
-<header>
+
 
    <div class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
@@ -128,7 +136,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </body>
   
 <!-- Start Footer -->
-    <footer class="bg-dark" id="tempaltemo_footer">
+    <footer class="bg-dark" id="footer">
         <div class="container">
             <div class="row">
 
