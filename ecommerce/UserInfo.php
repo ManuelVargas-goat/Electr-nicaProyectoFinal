@@ -221,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
 if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
     $_SESSION = array(); // Limpiar variables de sesión
-    session_destroy();  
+    session_destroy();
     header("Location: Inicio_Principal.php");
     exit();
 }
@@ -327,47 +327,51 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                         <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario"
                             class="img-fluid rounded-circle mb-2" style="width: 64px;">
 
-                        <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
+                        <div class="fw-bold" style="color: #0b0b0b;"><?= htmlspecialchars($nombreUsuario) ?></div>
 
                     </div>
-                    <a href="UserInfo.php">Cuenta</a>
-                    <a href="UserRegistroPedido.php">Ordenes</a>
-                    <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar sesion</a>
-
+                    <nav class="d-none d-md-block">
+                        <ul>
+                            <a href="UserInfo.php" class="active">Cuenta</a>
+                            <a href="UserRegistroPedido.php">Ordenes</a>
+                            <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar sesion</a>
+                        </ul>
+                    </nav>
                 </div>
 
 
                 <div class="col-md-8 content">
-
-
                     <div>
-                        <div class="card">
-                            <div class="card-header bg-light fw-bold">
-                                <h4 class="card-title fw-bold">Datos Personales</h4>
-                            </div>
-
-                            <?php if ($mensaje): ?>
-                                <div class="alert <?= $claseMensaje ?> alert-dismissible fade show" role="alert">
-                                    <?= htmlspecialchars($mensaje) ?>
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert"
-                                        aria-label="Cerrar"></button>
+                        <div class="div div-info">
+                            <div class="card card-user-info">
+                                <div class="card-header bg-light fw-bold">
+                                    <h4 class="card-title fw-bold">Datos Personales</h4>
                                 </div>
-                            <?php endif; ?>
 
-                            <div class="card-body">
-                                <h6 class="card-title fw-bold">Nombre</h6>
-                                <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' .
-                                    htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' .
-                                    htmlspecialchars($perfilUsuario['apellido_materno'] ?? '') ?></span>
-                                <h6 class="card-title fw-bold">Telefono</h6>
-                                <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
-                                <h6 class="card-title fw-bold">Direccion</h6>
-                                <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
-                                <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
-                                <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                                <?php if ($mensaje): ?>
+                                    <div class="alert <?= $claseMensaje ?> alert-dismissible fade show" role="alert">
+                                        <?= htmlspecialchars($mensaje) ?>
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"
+                                            aria-label="Cerrar"></button>
+                                    </div>
+                                <?php endif; ?>
+
+                                <div class="card-body">
+                                    <h6 class="card-title fw-bold">Nombre</h6>
+                                    <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' .
+                                        htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' .
+                                        htmlspecialchars($perfilUsuario['apellido_materno'] ?? '') ?></span>
+                                    <h6 class="card-title fw-bold">Telefono</h6>
+                                    <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
+                                    <h6 class="card-title fw-bold">Direccion</h6>
+                                    <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
+                                    <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
+                                    <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                                </div>
                             </div>
 
-                            <div class="card">
+
+                            <div class="card card-user-info">
                                 <div class="card-header bg-light fw-bold">
                                     <h4 class="card-title fw-bold">Email</h4>
                                 </div>
@@ -392,31 +396,34 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                                 </div>
                             </div>
 
-                            <div class="card-header bg-light fw-bold">
-                                <h4 class="card-title fw-bold">Contraseña</h4>
+                            <div class="card card-user-info">
+                                <div class="card-header bg-light fw-bold">
+                                    <h4 class="card-title fw-bold">Contraseña</h4>
+                                </div>
+                                <div class="card-body">
+
+                                    <h6 class="card-title fw-bold">Cambiar Contraseña</h6>
+                                    <form method="POST">
+
+                                        <input type="hidden" name="change_password" value="2">
+                                        <label for="oldPassword" class="form-label">Contraseña Actual:</label><br>
+                                        <input type="password" class="form-control" id="oldPassword" name="old_password"
+                                            required><br>
+
+                                        <label for="newPassword" class="form-label">Nueva Contraseña:</label><br>
+                                        <input type="password" class="form-control" id="newPassword" name="new_password"
+                                            required><br>
+
+                                        <label for="confirmPassword" class="form-label">Confirmar Nueva
+                                            Contraseña:</label><br>
+                                        <input type="password" class="form-control" id="confirmPassword"
+                                            name="confirm_password" required><br>
+
+                                        <button type="submit" class="btn btn-primary">Cambiar Contraseña</button>
+                                    </form>
+                                </div>
                             </div>
-                            <div class="card-body">
 
-                                <h6 class="card-title fw-bold">Cambiar Contraseña</h6>
-                                <form method="POST">
-
-                                    <input type="hidden" name="change_password" value="2">
-                                    <label for="oldPassword" class="form-label">Contraseña Actual:</label><br>
-                                    <input type="password" class="form-control" id="oldPassword" name="old_password"
-                                        required><br>
-
-                                    <label for="newPassword" class="form-label">Nueva Contraseña:</label><br>
-                                    <input type="password" class="form-control" id="newPassword" name="new_password"
-                                        required><br>
-
-                                    <label for="confirmPassword" class="form-label">Confirmar Nueva
-                                        Contraseña:</label><br>
-                                    <input type="password" class="form-control" id="confirmPassword"
-                                        name="confirm_password" required><br>
-
-                                    <button type="submit" class="btn btn-primary">Cambiar Contraseña</button>
-                                </form>
-                            </div>
                         </div>
 
                     </div>
