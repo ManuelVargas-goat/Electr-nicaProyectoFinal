@@ -8,12 +8,13 @@ if (!isset($_SESSION['usuario'])) {
 }
 
 $error = '';
-$mensaje_exito = ''; // Para mostrar mensajes de éxito desde nueva_persona.php
+$mensaje_exito = ''; // Para mostrar mensajes de éxito desde nueva_persona.php o editar_persona.php
 
 // Obtener personas para asociar con proveedor
 $personas = [];
 try {
-    $stmtPersonas = $pdo->query("SELECT persona_id, nombre, apellido_paterno FROM persona ORDER BY nombre");
+    // MODIFICACIÓN AQUÍ: Se selecciona 'apellido_materno' también
+    $stmtPersonas = $pdo->query("SELECT persona_id, nombre, apellido_paterno, apellido_materno FROM persona ORDER BY nombre");
     $personas = $stmtPersonas->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $error = "Error al cargar personas: " . $e->getMessage();
@@ -149,19 +150,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="mb-3">
             <label for="persona_id" class="form-label">Representante (Persona)</label>
             <div class="row g-2 align-items-end">
-                <div class="col-md-7"> <select name="persona_id" id="persona_id" class="form-select" required>
+                <div class="col-md-7">
+                    <select name="persona_id" id="persona_id" class="form-select" required>
                         <option value="">Seleccione una persona</option>
-                        <?php foreach ($personas as $persona): ?>
+                        <?php foreach ($personas as $persona):
+                            // MODIFICACIÓN AQUÍ: Se incluye el apellido materno si existe
+                            $nombre_completo = htmlspecialchars($persona['nombre'] . ' ' . $persona['apellido_paterno']);
+                            if (!empty($persona['apellido_materno'])) {
+                                $nombre_completo .= ' ' . htmlspecialchars($persona['apellido_materno']);
+                            }
+                        ?>
                             <option value="<?= htmlspecialchars($persona['persona_id']) ?>"
                                 <?= ($persona_id_selected == $persona['persona_id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($persona['nombre'] . ' ' . $persona['apellido_paterno']) ?>
+                                <?= $nombre_completo ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-5 d-flex gap-2"> <a href="#" id="btnEditarPersona" class="btn btn-outline-info flex-fill" title="Editar persona seleccionada" disabled>
-                        Editar Persona
-                    </a>
+                <div class="col-md-5 d-flex gap-2">
+                    <a href="#" id="btnEditarPersona" class="btn btn-outline-info flex-fill" title="Editar o seleccionar persona">
+                        </a>
                     <a href="nueva_persona.php" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
                         + Nueva Persona
                     </a>
@@ -191,7 +199,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <select name="ciudad" id="ciudad" class="form-select" required>
                 <option value="">Seleccione un país primero</option>
                 <?php
-                // Definir ciudadesPorPais en PHP para que esté disponible si el formulario se recarga con errores
                 $ciudadesPorPais = [
                     "Perú" => ["Arequipa", "Lima", "Cusco", "Trujillo", "Piura"],
                     "Colombia" => ["Bogotá", "Medellín", "Cali", "Barranquilla"],
@@ -233,7 +240,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Se movió este array JS dentro de la etiqueta script para asegurar que esté definido.
     const ciudadesPorPais = {
         "Perú": ["Arequipa", "Lima", "Cusco", "Trujillo", "Piura"],
         "Colombia": ["Bogotá", "Medellín", "Cali", "Barranquilla"],
@@ -242,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "México": ["Ciudad de México", "Guadalajara", "Monterrey"],
         "España": ["Madrid", "Barcelona", "Valencia"],
         "Estados Unidos": ["New York", "Los Angeles", "Chicago"],
-        "Otro": ["Otra"] // Mantener "Otro" para países no listados
+        "Otro": ["Otra"]
     };
 
     const paisSelect = document.getElementById('pais');
@@ -250,7 +256,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const personaSelect = document.getElementById('persona_id');
     const btnEditarPersona = document.getElementById('btnEditarPersona');
 
-    // Función para actualizar las ciudades
     function actualizarCiudades() {
         const paisSeleccionado = paisSelect.value;
         ciudadSelect.innerHTML = '<option value="">Seleccione una ciudad</option>';
@@ -276,36 +281,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Función para actualizar el estado del botón "Editar Persona"
     function actualizarBotonEditarPersona() {
         const personaIdSeleccionada = personaSelect.value;
         if (personaIdSeleccionada && personaIdSeleccionada !== "") {
             btnEditarPersona.href = 'editar_persona.php?persona_id=' + personaIdSeleccionada;
-            btnEditarPersona.removeAttribute('disabled');
-            btnEditarPersona.classList.remove('disabled'); // Asegúrate de quitar la clase disabled de Bootstrap si está presente
+            btnEditarPersona.textContent = 'Editar Persona';
+            btnEditarPersona.classList.remove('disabled');
         } else {
-            btnEditarPersona.href = '#';
-            btnEditarPersona.setAttribute('disabled', 'disabled');
-            btnEditarPersona.classList.add('disabled'); // Agrega la clase disabled de Bootstrap
+            btnEditarPersona.href = 'seleccionar_persona.php';
+            btnEditarPersona.textContent = 'Seleccionar Persona';
+            btnEditarPersona.classList.remove('disabled');
         }
     }
 
-    // Escuchar cambios en el selector de país
     paisSelect.addEventListener('change', actualizarCiudades);
-
-    // Escuchar cambios en el selector de persona
     personaSelect.addEventListener('change', actualizarBotonEditarPersona);
 
-
-    // Ejecutar al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
         if (paisSelect.value !== '') {
             actualizarCiudades();
         }
-        // Inicializar el estado del botón "Editar Persona" al cargar la página
         actualizarBotonEditarPersona();
 
-        // Lógica para el Modo Oscuro (si la tienes implementada globalmente)
         const body = document.body;
         if (localStorage.getItem('darkMode') === 'enabled') {
             body.classList.add('dark-mode');
