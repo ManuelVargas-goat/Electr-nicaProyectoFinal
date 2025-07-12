@@ -1,6 +1,69 @@
 <?php
 include("config.php");
 
+if (!isset($_SESSION['usuario'])) {
+    header("Location: UserLogin.php");
+    exit();
+}
+
+$usuario = $_SESSION['usuario'];
+
+print_r($usuario );
+
+// Mensajes de notificación desde la URL
+$mensaje = $_GET['mensaje'] ?? '';
+$tipoMensaje = $_GET['tipo'] ?? '';
+
+
+// Obtener datos del usuario actual (nombre) para el sidebar
+$sql = "SELECT per.nombre, per.apellido_paterno, uc.persona_id
+        FROM usuario_cliente uc
+        JOIN persona per ON uc.persona_id = per.persona_id
+        WHERE uc.usuario = :usuario";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute([':usuario' => $usuario]);
+
+$usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$nombreUsuario = 'Usuario'; // Valor por defecto
+$personaId = null;
+
+if ($usuarioActual) {
+    $nombreUsuario = $usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno'];
+    $personaId = $usuarioActual['persona_id'];
+}
+
+print_r($personaId );
+
+if ($personaId) {
+    $sqlCompras = "SELECT c.compra_id,c.fecha_compra,e.nombre as estado, 
+                   COALESCE(per.nombre || ' ' || per.apellido_paterno, 'N/A') AS cliente,
+                   SUM(dc.cantidad * CASE 
+                   WHEN dc.precio_unitario = 0 THEN pr.precio
+                   ELSE dc.precio_unitario
+                   END ) AS total_precio,
+                   SUM(dc.cantidad) AS total_cantidad
+                   FROM compra c 
+                   JOIN detalle_compra dc ON c.compra_id = dc.compra_id
+                   JOIN estado e ON c.estado_id = e.estado_id
+                   JOIN producto pr ON dc.producto_id = pr.producto_id
+                   LEFT JOIN usuario_cliente uc ON c.usuario_cliente_id = uc.usuario_cliente_id
+                   LEFT JOIN persona per ON uc.persona_id = per.persona_id
+                   WHERE per.persona_id = :persona_id
+                   GROUP BY c.compra_id, c.fecha_compra, per.nombre, per.apellido_paterno, e.nombre
+                   ORDER BY c.compra_id DESC";
+    $stmtCompras = $pdo->prepare($sqlCompras);
+    $stmtCompras->execute([':persona_id' => $personaId]);
+    $ComprasUsuario = $stmtCompras->fetchAll(PDO::FETCH_ASSOC);
+}
+
+if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
+    $_SESSION = array(); // Limpiar variables de sesión
+    session_destroy();  
+    header("Location: Inicio_Principal.php");
+    exit();
+}
 
 ?>
 
@@ -18,7 +81,16 @@ include("config.php");
      <link rel="stylesheet" href="css/index.css">
 
      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-      
+     <style>
+        .sidebar a {
+            display: block;
+            padding: 8px 15px;
+            color: #0b0b0b;
+            text-decoration: none;
+        }
+
+
+     </style>
 
     </head>
 
@@ -77,23 +149,52 @@ include("config.php");
 <body>
 
 <div class="container-fluid">
-    <div class="gestioncliente-box">
+
         <div class="row">
 
-            <div class="col-md-4 sidebar">
-                <a href="#">Cuenta</a>
-                <a href="#">Ordenes</a>
-                <a href="#">Cerrar sesion</a>
+            <div class="col-md-3 sidebar">
+                <div class="user-box text-center mb-4">
+                    <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
+
+                    <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
+
             </div>
+            <a href="UserInfo.php">Cuenta</a>
+            <a href="UserRegistroPedido.php">Ordenes</a>
+            <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar sesion</a>
+
+            </div>
+
             <div class="col-md-8 content">
 
-                <h3 class="mb-4">Gestión de Existencias - Pedidos</h3>
+                <div class="text-center">
 
-            <div></div>
+                <?php if (count($ComprasUsuario) > 0): ?>
+                    <?php foreach ($ComprasUsuario as $row): ?>
+
+                        <div class="card">
+                            <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                                
+                            <h4 class="card-title fw-bold mb-0"><?= htmlspecialchars( date('d-m-Y', strtotime($row['fecha_compra'])) ) ?></h4> <span># <?= htmlspecialchars($row['compra_id']) ?></span>
+                        </div>
+
+                    <div class="card-body">
+                        <h6 class="card-title fw-bold">Estado: <?= htmlspecialchars($row['estado']) ?></h6>
+                        <h6 class="card-title fw-bold">Total de la Orden: <?= htmlspecialchars($row['total_precio']) ?></h6>
+                    </div>
+                    <?php endforeach; ?>
+                    <?php else: ?>
+                    <tr>
+                        <td colspan="7" class="text-center">No se encontraron pedidos.</td>
+                     </tr>
+                    <?php endif; ?>
+
+                </div>
+
+            </div>
         
         </div>
-        
-    </div>
+
 
 </div>
 
@@ -101,7 +202,7 @@ include("config.php");
 </body>
   
 <!-- Start Footer -->
-    <footer class="bg-dark" id="tempaltemo_footer">
+    <footer class="bg-dark" id="footer">
         <div class="container">
             <div class="row">
 

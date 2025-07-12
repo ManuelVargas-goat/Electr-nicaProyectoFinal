@@ -19,7 +19,7 @@ $stmt->execute([':usuario' => $usuario]);
 
 $usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC);
 
-print_r($usuarioActual );
+print_r($usuarioActual);
 
 $nombreUsuario = 'Usuario'; // Valor por defecto
 $personaId = null;
@@ -40,191 +40,400 @@ if ($personaId) {
     $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
 }
 
-print_r($perfilUsuario['nombre']);
+// Lógica para actualizar perfil
+$mensaje = '';
+$claseMensaje = '';
+
+// Lógica para actualizar todo el perfil
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+    $nombre = trim($_POST['nombre'] ?? '');
+    $apellido_paterno = trim($_POST['apellido_paterno'] ?? '');
+    $apellido_materno = trim($_POST['apellido_materno'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $direccion = trim($_POST['direccion'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
+    $sexo = trim($_POST['sexo'] ?? '');
+
+    // Validaciones básicas (puedes añadir más si es necesario)
+    if (empty($nombre) || empty($apellido_paterno) || empty($email)) {
+        $mensaje = 'Por favor, complete los campos obligatorios (Nombre, Apellido Paterno, Email).';
+        $claseMensaje = 'alert-danger';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $mensaje = 'El formato del email no es válido.';
+        $claseMensaje = 'alert-danger';
+    } else {
+        try {
+            $sqlUpdate = "UPDATE persona SET
+                          nombre = :nombre,
+                          apellido_paterno = :apellido_paterno,
+                          apellido_materno = :apellido_materno,
+                          email = :email,
+                          direccion = :direccion,
+                          telefono = :telefono,
+                          fecha_nacimiento = :fecha_nacimiento,
+                          sexo = :sexo
+                          WHERE persona_id = :persona_id";
+
+            $stmtUpdate = $pdo->prepare($sqlUpdate);
+            $stmtUpdate->bindParam(':nombre', $nombre);
+            $stmtUpdate->bindParam(':apellido_paterno', $apellido_paterno);
+            $stmtUpdate->bindParam(':apellido_materno', $apellido_materno);
+            $stmtUpdate->bindParam(':email', $email);
+            $stmtUpdate->bindParam(':direccion', $direccion);
+            $stmtUpdate->bindParam(':telefono', $telefono);
+            $stmtUpdate->bindParam(':fecha_nacimiento', $fecha_nacimiento);
+            $stmtUpdate->bindParam(':sexo', $sexo);
+            $stmtUpdate->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
+
+            if ($stmtUpdate->execute()) {
+                $mensaje = '¡Perfil actualizado con éxito!';
+                $claseMensaje = 'alert-success';
+                // Volver a cargar los datos del perfil para reflejar los cambios
+                $stmtPerfil = $pdo->prepare($sqlPerfil);
+                $stmtPerfil->execute([':persona_id' => $personaId]);
+                $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
+
+                // Actualizar el nombre del usuario en el sidebar si ha cambiado
+                $nombreUsuario = $perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno'];
+
+            } else {
+                $mensaje = 'Error al actualizar el perfil. Inténtelo de nuevo.';
+                $claseMensaje = 'alert-danger';
+            }
+        } catch (PDOException $e) {
+            $mensaje = 'Error de base de datos: ' . $e->getMessage();
+            $claseMensaje = 'alert-danger';
+        }
+    }
+    // Lógica para cambiar el email
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_email'])) {
+
+    // Buscamos la clave
+    $sql = "SELECT uc.clave as clave
+            FROM usuario_empleado uc
+            WHERE uc.usuario = :usuario ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':usuario' => $_SESSION['usuario'] // Pasar la clave encriptada
+    ]);
+
+
+    if ($stmt->rowCount() == 1) {
+        $datos = $stmt->fetch(PDO::FETCH_ASSOC);
+        $password = $datos['clave'];
+    } else {
+        $mensaje = "❌ Error al comunicarse con la base.";
+    }
+
+
+    $new_email = $_POST['new_email'] ?? '';
+    $confirm_password = $_POST['password'] ?? '';
+
+    if (empty($new_email) || empty($confirm_password)) {
+        $mensaje = 'Por favor, llene todos los campos correspondientes.';
+        $claseMensaje = 'alert-danger';
+    } else {
+        try {
+
+            $sqlUpdateEmail = "UPDATE persona SET email = :email WHERE persona_id = :persona_id";
+            $stmtUpdateEmail = $pdo->prepare($sqlUpdateEmail);
+            $stmtUpdateEmail->bindParam(':email', $new_email);
+            $stmtUpdateEmail->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
+
+            if ($stmtUpdateEmail->execute()) {
+
+                $mensaje = 'Email cambiado con éxito!';
+                $claseMensaje = 'alert-success';
+                header("Refresh: 2");
+            } else {
+                $mensaje = 'Error al cambiar el email. Inténtelo de nuevo.';
+                $claseMensaje = 'alert-danger';
+            }
+        } catch (PDOException $e) {
+            $mensaje = 'Error de base de datos al cambiar el email: ' . $e->getMessage();
+            $claseMensaje = 'alert-danger';
+        }
+    }
+    // Lógica para cambiar la contraseña
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
+
+
+    // Buscamos la clave
+    $sql = "SELECT uc.clave as clave
+            FROM usuario_empleado uc
+            WHERE uc.usuario = :usuario ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':usuario' => $_SESSION['usuario'] // Pasar la clave encriptada
+    ]);
+
+
+    if ($stmt->rowCount() == 1) {
+        $datos = $stmt->fetch(PDO::FETCH_ASSOC);
+        $password = $datos['clave'];
+    } else {
+        $mensaje = "❌ Error al comunicarse con la base.";
+    }
+
+    $old_password = $_POST['old_password'] ?? '';
+    $new_password = $_POST['new_password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+
+    if (empty($old_password) || empty($new_password) || empty($confirm_password)) {
+        $mensaje = 'Por favor, ingrese y confirme la nueva contraseña.';
+        $claseMensaje = 'alert-danger';
+    } elseif ($password !== $old_password) {
+        $mensaje = 'Su antigua contraseña es incorrecta.';
+        $claseMensaje = 'alert-danger';
+    } elseif ($new_password !== $confirm_password) {
+        $mensaje = 'Las contraseñas no coinciden.';
+        $claseMensaje = 'alert-danger';
+    } elseif (strlen($new_password) < 3) {
+        $mensaje = 'La contraseña debe tener al menos 3 caracteres.';
+        $claseMensaje = 'alert-danger';
+    } else {
+        try {
+            // En una aplicación real, usar password_hash() para almacenar contraseñas de forma segura
+            $hashed_password = $new_password;
+
+            $sqlUpdatePassword = "UPDATE usuario_cliente SET clave = :password WHERE persona_id = :persona_id";
+            $stmtUpdatePassword = $pdo->prepare($sqlUpdatePassword);
+            $stmtUpdatePassword->bindParam(':password', $hashed_password);
+            $stmtUpdatePassword->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
+
+            if ($stmtUpdatePassword->execute()) {
+                $mensaje = '¡Contraseña cambiada con éxito!';
+                $claseMensaje = 'alert-success';
+                header("Refresh: 2");
+            } else {
+                $mensaje = 'Error al cambiar la contraseña. Inténtelo de nuevo.';
+                $claseMensaje = 'alert-danger';
+            }
+        } catch (PDOException $e) {
+            $mensaje = 'Error de base de datos al cambiar la contraseña: ' . $e->getMessage();
+            $claseMensaje = 'alert-danger';
+        }
+    }
+}
+
+if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
+    $_SESSION = array(); // Limpiar variables de sesión
+    session_destroy();  
+    header("Location: Inicio_Principal.php");
+    exit();
+}
+
 ?>
 
 
 <!DOCTYPE html>
-<html lang="es" >
-  <head>
+<html lang="es">
+
+<head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Tienda Informatica</title>
 
-     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
-     
-     <link rel="stylesheet" href="css/index.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
 
-     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-     <style>
+    <link rel="stylesheet" href="css/index.css">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+        integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
         .sidebar a {
             display: block;
             padding: 8px 15px;
             color: #0b0b0b;
             text-decoration: none;
         }
+    </style>
 
-
-     </style>
-
-    </head>
-
-<!-- Nav Bar Redes-->
-    <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
-        <div class="container text-light">
-            <div class="w-100 d-flex justify-content-between">
-                <div>
-                    <i class="fa fa-envelope mx-2"></i>
-                    <a class="navbar-sm-brand text-light text-decoration-none" href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
-                    <i class="fa fa-phone mx-2"></i>
-                    <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854 555</a>
-                </div>
-                <div>
-                    <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
-                    <a class="text-light" href="https://www.instagram.com/" target="_blank"><i class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
-                    <a class="text-light" href="https://twitter.com/" target="_blank"><i class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
-                </div>
-            </div>
-        </div>
-    </nav>
-<!-- Nav Bar Redes-->
-
-<!-- Header -->
-<header>
-
-   <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a href="Inicio_Principal.php" class="navbar-brand">
-                <strong>Tienda Electronica</strong>
-            </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
-            data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
-
-                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-                
-                <a href="carrocompras.php" class="btn btn-primary position-relative">
-                <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
-
-            </div>
-        
-    
-        </div>
-
-    </div>
-
-</header>
-
-<!-- Fin Header -->
+</head>
 
 <body>
+    <div class="wrapper">
 
-<div class="container-fluid">
+        <!-- Nav Bar Redes-->
+        <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
+            <div class="container text-light">
+                <div class="w-100 d-flex justify-content-between">
+                    <div>
+                        <i class="fa fa-envelope mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none"
+                            href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
+                        <i class="fa fa-phone mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854
+                            555</a>
+                    </div>
+                    <div>
+                        <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i
+                                class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://www.instagram.com/" target="_blank"><i
+                                class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://twitter.com/" target="_blank"><i
+                                class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <!-- Nav Bar Redes-->
 
-    <div class="row">
+        <!-- Header -->
+        <header>
 
-        <div class="col-md-3 sidebar">
-            <div class="user-box text-center mb-4">
-                <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
+            <div class="navbar navbar-expand-lg navbar-dark bg-dark">
+                <div class="container">
+                    <a href="Inicio_Principal.php" class="navbar-brand">
+                        <strong>Tienda Electronica</strong>
+                    </a>
 
-                <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;"
+                        id="navbarHeader">
+
+                        <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+
+                        <a href="carrocompras.php" class="btn btn-primary position-relative">
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
+
+                    </div>
+
+
+                </div>
 
             </div>
-            <a href="UserInfo.php">Cuenta</a>
-            <a href="UserRegistroPedido.php">Ordenes</a>
-            <a href="Inicio_Principal.php">Cerrar sesion</a>
 
-        </div>
+        </header>
 
-
-        <div class="col-md-8 content">
+        <!-- Fin Header -->
 
 
-            <div>
-                <div class="card">
-                    <div class="card-header bg-light fw-bold">
-                         <h4 class="card-title fw-bold">Datos Personales</h4>
+        <div class="container-fluid">
+
+            <div class="row">
+                <div class="col-md-3 sidebar">
+                    <div class="user-box text-center mb-4">
+                        <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario"
+                            class="img-fluid rounded-circle mb-2" style="width: 64px;">
+
+                        <div class="fw-bold"><?= htmlspecialchars($nombreUsuario) ?></div>
+
                     </div>
-                    <div class="card-body">
-                    <h6 class="card-title fw-bold">Nombre</h6>
-                    <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' . 
-                    htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' . 
-                    htmlspecialchars($perfilUsuario['apellido_materno'] ?? '')?></span>
-                    <h6 class="card-title fw-bold">Telefono</h6>
-                    <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
-                    <h6 class="card-title fw-bold">Direccion</h6>
-                    <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
-                    <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
-                    <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                    <a href="UserInfo.php">Cuenta</a>
+                    <a href="UserRegistroPedido.php">Ordenes</a>
+                    <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar sesion</a>
+
                 </div>
 
-                <div class="card">
-                    <div class="card-header bg-light fw-bold">
-                         <h4 class="card-title fw-bold">Email</h4>
+
+                <div class="col-md-8 content">
+
+
+                    <div>
+                        <div class="card">
+                            <div class="card-header bg-light fw-bold">
+                                <h4 class="card-title fw-bold">Datos Personales</h4>
+                            </div>
+
+                            <?php if ($mensaje): ?>
+                                <div class="alert <?= $claseMensaje ?> alert-dismissible fade show" role="alert">
+                                    <?= htmlspecialchars($mensaje) ?>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"
+                                        aria-label="Cerrar"></button>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="card-body">
+                                <h6 class="card-title fw-bold">Nombre</h6>
+                                <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' .
+                                    htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' .
+                                    htmlspecialchars($perfilUsuario['apellido_materno'] ?? '') ?></span>
+                                <h6 class="card-title fw-bold">Telefono</h6>
+                                <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
+                                <h6 class="card-title fw-bold">Direccion</h6>
+                                <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
+                                <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
+                                <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-header bg-light fw-bold">
+                                    <h4 class="card-title fw-bold">Email</h4>
+                                </div>
+                                <div class="card-body">
+                                    <h6 class="card-title fw-bold">Correo Actual</h6>
+                                    <span><?= htmlspecialchars($perfilUsuario['email'] ?? '') ?></span>
+
+                                    <h6 class="card-title fw-bold">Cambiar correo inscrito</h6>
+                                    <form method="POST">
+
+                                        <input type="hidden" name="change_email" value="1">
+                                        <label for="newEmail" class="form-label">Nuevo Correo</label><br>
+                                        <input type="email" class="form-control" id="newEmail" name="new_email"
+                                            required><br>
+
+                                        <label for="confirmEmail" class="form-label">Contraseña</label><br>
+                                        <input type="password" class="form-control" id="Password" name="password"
+                                            required><br>
+
+                                        <button type="submit" class="btn btn-primary">Cambiar Correo</button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="card-header bg-light fw-bold">
+                                <h4 class="card-title fw-bold">Contraseña</h4>
+                            </div>
+                            <div class="card-body">
+
+                                <h6 class="card-title fw-bold">Cambiar Contraseña</h6>
+                                <form method="POST">
+
+                                    <input type="hidden" name="change_password" value="2">
+                                    <label for="oldPassword" class="form-label">Contraseña Actual:</label><br>
+                                    <input type="password" class="form-control" id="oldPassword" name="old_password"
+                                        required><br>
+
+                                    <label for="newPassword" class="form-label">Nueva Contraseña:</label><br>
+                                    <input type="password" class="form-control" id="newPassword" name="new_password"
+                                        required><br>
+
+                                    <label for="confirmPassword" class="form-label">Confirmar Nueva
+                                        Contraseña:</label><br>
+                                    <input type="password" class="form-control" id="confirmPassword"
+                                        name="confirm_password" required><br>
+
+                                    <button type="submit" class="btn btn-primary">Cambiar Contraseña</button>
+                                </form>
+                            </div>
+                        </div>
+
                     </div>
-                    <div class="card-body">
-                        <h6 class="card-title fw-bold">Correo Actual</h6>
-                            <span><?= htmlspecialchars($perfilUsuario['email'] ?? '') ?></span>
-                        
-                            <h6 class="card-title fw-bold">Cambiar correo inscrito</h6>
-                        <form action="UserInfo.php" method="POST">
 
-                            <label>Nuevo Correo</label><br>
-                            <input type="email" name="new_email" ><br>
-
-                            <label>Confirmar Nuevo Correo</label><br>
-                            <input type="email" name="confirm_email"><br>
-
-                            <label>Contraseña</label><br>
-                            <input type="password" name="password" ><br>
-                        
-                            <button type="submit" class="btn btn-primary">Cambiar Correo</button>
-                        </form>
-                    </div>
                 </div>
 
-                    <div class="card-header bg-light fw-bold">
-                         <h4 class="card-title fw-bold">Contraseña</h4>
-                    </div>
-                    <div class="card-body">
-
-                            <h6 class="card-title fw-bold">Cambiar Contraseña</h6>
-                        <form action="UserInfo.php" method="POST">
-
-                            <label>Contraseña Actual</label><br>
-                            <input type="password" name="actual_password" ><br>
-
-                            <label>Confirmar Nueva Contraseña</label><br>
-                            <input type="password" name="new_password"><br>
-
-                            <label>Confirmar Nueva Contraseña</label><br>
-                            <input type="password" name="renew_password" ><br>
-                        
-                            <button type="submit" class="btn btn-primary">Cambiar Contraseña</button>
-                        </form>
-                    </div>
-                </div>
-                    
             </div>
 
-        </div>
-        
         </div>
 
     </div>
 
-</div>
 
 
-</body>
-  
-<!-- Start Footer -->
-    <footer class="bg-dark" id="tempaltemo_footer">
+
+    <!-- Start Footer -->
+    <footer class="bg-dark" id="footer">
         <div class="container">
             <div class="row">
 
@@ -245,15 +454,16 @@ print_r($perfilUsuario['nombre']);
                         </li>
                         <li>
                             <i class="fa fa-envelope fa-fw"></i>
-                            <a class="text-decoration-none" href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
+                            <a class="text-decoration-none"
+                                href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
                         </li>
                     </ul>
                 </div>
 
                 <div class="col-md-4 pt-5">
-                    
+
                     <ul class="list-unstyled text-light footer-link-list">
-                    
+
                     </ul>
                 </div>
 
@@ -276,16 +486,19 @@ print_r($perfilUsuario['nombre']);
                 <div class="col-auto me-auto">
                     <ul class="list-inline text-left footer-icons">
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="http://facebook.com/"><i class="fab fa-facebook-f fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank" href="http://facebook.com/"><i
+                                    class="fab fa-facebook-f fa-lg fa-fw"></i></a>
                         </li>
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="https://www.instagram.com/"><i class="fab fa-instagram fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank"
+                                href="https://www.instagram.com/"><i class="fab fa-instagram fa-lg fa-fw"></i></a>
                         </li>
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="https://twitter.com/"><i class="fab fa-twitter fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank" href="https://twitter.com/"><i
+                                    class="fab fa-twitter fa-lg fa-fw"></i></a>
                         </li>
                     </ul>
-                </div>               
+                </div>
             </div>
         </div>
 
@@ -295,7 +508,7 @@ print_r($perfilUsuario['nombre']);
                     <div class="col-12">
                         <p class="text-left text-light">
                             Copyright &copy; 2025 ISUR
-                            
+
                         </p>
                     </div>
                 </div>
@@ -304,5 +517,8 @@ print_r($perfilUsuario['nombre']);
 
     </footer>
     <!-- End Footer -->
+    </div>
 
-</html>    
+</body>
+
+</html>
