@@ -211,7 +211,7 @@ if($id == ''){
       }   
     }
         function addProducto(id){
-            let url = "/paginas/Electronica-prueba/comprasact.php"
+            let url = "comprasact.php"
             let cantidad = document.getElementById("cantidadprod").textContent;
             let formData = new FormData()
             

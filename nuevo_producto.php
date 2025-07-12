@@ -25,6 +25,7 @@ $precio = '';
 $marca = '';
 $descontinuado = false; // Valor por defecto para el checkbox
 $categoria_id = '';
+$rutaimagen = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
@@ -40,6 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Stock inicial se establecerá a 0 por defecto al insertar
     $stock_inicial_default = 0;
+    $directorio = 'ecommerce/imgs/';
+    $tipoArchivo = $_FILES['imagen']['type'];
+    $rutaimagen = $directorio . $nombre. ".png";
 
     if (empty($nombre)) {
         $error = "El nombre del producto es obligatorio.";
@@ -47,9 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "El precio debe ser un número válido y no negativo.";
     } elseif ($categoria_id === false || $categoria_id <= 0) {
         $error = "Debe seleccionar una categoría válida.";
+    } elseif ($tipoArchivo != 'image/png') {
+        $error = "La imagen no es de tipo png.";
     } else {
         try {
-            $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id) VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id)");
+            move_uploaded_file($_FILES["imagen"]["tmp_name"],$rutaimagen);
+            
+            $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id, ruta_imagen) VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id, :ruta_imagen)");
             $stmt->execute([
                 ':nombre' => $nombre,
                 ':descripcion' => $descripcion,
@@ -57,7 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':unidad_stock' => $stock_inicial_default, // Establece stock inicial a 0
                 ':marca' => $marca,
                 ':descontinuado' => $descontinuado, // Ahora será 0 o 1
-                ':categoria_id' => $categoria_id
+                ':categoria_id' => $categoria_id,
+                ':ruta_imagen' => $rutaimagen
             ]);
             header("Location: gestion_catalogo_productos.php?status=success_add");
             exit();
@@ -119,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <form method="POST" class="card p-4">
+    <form method="POST" class="card p-4" enctype="multipart/form-data">
         <div class="mb-3">
             <label for="nombre" class="form-label">Nombre del Producto</label>
             <input type="text" name="nombre" id="nombre" class="form-control" value="<?= htmlspecialchars($nombre) ?>" required>
@@ -149,11 +158,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="form-check mb-4">
+        <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" name="descontinuado" id="descontinuado" <?= $descontinuado ? 'checked' : '' ?>>
             <label class="form-check-label" for="descontinuado">
                 Producto descontinuado
             </label>
+        </div>
+        <div class="mb-4">
+            <label for="imagen" class="form-label">Imagen</label>
+            <input type="file" name="imagen" id="imagen" class="form-control" required>
         </div>
         <div class="d-flex justify-content-between">
             <a href="gestion_catalogo_productos.php" class="btn btn-secondary">Cancelar</a>

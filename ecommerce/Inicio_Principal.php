@@ -1,7 +1,7 @@
 <?php
 include("config.php");
 
-$sql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria
+$sql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen
        From producto pr INNER JOIN categoria cat 
        ON cat.categoria_id = pr.categoria_id";
 
@@ -60,25 +60,26 @@ $resultado = $stmt->fetchAll();
         <header>
 
             <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-                <div class="container">
+                <div class="container d-flex justify-content-between align-items-center">
+
                     <a href="Inicio_Principal.php" class="navbar-brand">
                         <strong>Tienda Electronica</strong>
                     </a>
 
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
-                        <span class="navbar-toggler-icon"></span>
-                    </button>
+                    <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET" style="max-width: 600px;">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
 
-                    <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;"
-                        id="navbarHeader">
-
+                    <div class="d-flex gap-2">
                         <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
                         <a href="carrocompras.php" class="btn btn-primary position-relative">
-                            <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
-
-                    </div>
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito
+                            <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?php echo $num_cart; ?>
+                            </span>
+                        </a>
+                    </div> 
 
 
                 </div>
@@ -188,7 +189,7 @@ $resultado = $stmt->fetchAll();
                                 <?php foreach ($resultado as $row): ?>
 
                                     <div class="col">
-                                        <div class="card h-100 shadow-sm"> <img src="imgs/<?= $row['nombre']; ?>.png"
+                                        <div class="card h-100 shadow-sm"> <img src="../<?= $row['imagen']; ?>"
                                                 class="card-img-top" alt="..."></a>
                                             <div class="card-body">
                                                 <div class="h2 card-title text-center"><span
@@ -223,7 +224,7 @@ $resultado = $stmt->fetchAll();
             <script>
 
                 function addProducto(id) {
-                    let url = "/paginas/Electronica-prueba/comprasact.php"
+                    let url = "comprasact.php"
                     let formData = new FormData()
                     formData.append('id', id)
 

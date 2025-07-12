@@ -41,7 +41,7 @@ if (!filter_var($producto_id, FILTER_VALIDATE_INT)) {
 try {
     // 3. Si es una solicitud GET o si es POST pero se necesita recargar el formulario después de un error
     //    Obtener los datos del producto para mostrarlos en el formulario
-    $stmt = $pdo->prepare("SELECT producto_id, nombre, descripcion, precio, marca, descontinuado, categoria_id FROM producto WHERE producto_id = :id");
+    $stmt = $pdo->prepare("SELECT producto_id, nombre, descripcion, precio, marca, descontinuado, categoria_id, ruta_imagen as imagen FROM producto WHERE producto_id = :id");
     $stmt->execute([':id' => $producto_id]);
     $producto = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -62,6 +62,8 @@ try {
         $marca = trim($_POST['marca'] ?? '');
         $categoria_id = filter_var($_POST['categoria_id'] ?? '', FILTER_VALIDATE_INT);
         $descontinuado = isset($_POST['descontinuado']) ? 1 : 0; 
+        $temp_imagen = $_FILES['imagen']['tmp_name'];
+        $directorio = 'ecommerce/imgs/';
         $errores = [];
 
         if (empty($nombre)) {
@@ -79,10 +81,20 @@ try {
         if ($categoria_id === false || $categoria_id <= 0) {
             $errores[] = "Debe seleccionar una categoría válida.";
         }
+        if (empty($temp_imagen)) {
+            $rutaimagen = $producto['imagen'];
+        } elseif ($_FILES['imagen']['type'] != 'image/png'){
+            $errores[] = "La imagen no es de tipo png.";
+        } 
 
         if (empty($errores)) {
+            if(!empty($temp_imagen)){
+                unlink($ruta_imagen);
+                $rutaimagen = $directorio . $nombre. ".png";
+                move_uploaded_file($_FILES["imagen"]["tmp_name"],$rutaimagen);
+            }
             // Actualizar el producto en la base de datos
-            $updateStmt = $pdo->prepare("UPDATE producto SET nombre = :nombre, descripcion = :descripcion, precio = :precio, marca = :marca, categoria_id = :categoria_id, descontinuado = :descontinuado WHERE producto_id = :producto_id");
+            $updateStmt = $pdo->prepare("UPDATE producto SET nombre = :nombre, descripcion = :descripcion, precio = :precio, marca = :marca, categoria_id = :categoria_id, descontinuado = :descontinuado,ruta_imagen = :ruta_imagen  WHERE producto_id = :producto_id");
             $updateStmt->execute([
                 ':nombre' => $nombre,
                 ':descripcion' => $descripcion,
@@ -90,7 +102,8 @@ try {
                 ':marca' => $marca,
                 ':categoria_id' => $categoria_id,
                 ':descontinuado' => $descontinuado,
-                ':producto_id' => $producto_id
+                ':producto_id' => $producto_id,
+                ':ruta_imagen' => $rutaimagen
             ]);
 
             header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("Producto actualizado con éxito.") . "&tipo=success");
@@ -157,7 +170,7 @@ try {
 
             <?php if ($producto): ?>
             <div class="form-section">
-                <form action="editar_producto.php?id=<?= $producto['producto_id'] ?>" method="POST">
+                <form action="editar_producto.php?id=<?= $producto['producto_id'] ?>" method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="producto_id" value="<?= htmlspecialchars($producto['producto_id']) ?>">
 
                     <div class="mb-3">
@@ -198,6 +211,23 @@ try {
                         <input type="checkbox" class="form-check-input" id="descontinuado" name="descontinuado" value="1" <?= $producto['descontinuado'] ? 'checked' : '' ?>>
                         <label class="form-check-label" for="descontinuado">Producto descontinuado</label>
                     </div>
+
+                    <div class="mb-3">
+                        <label for="imagen" class="form-label">Imagen</label>
+                        <input type="file" name="imagen" id="imagen" class="form-control" >                      
+                    </div>
+
+                    <div class="mb-3">
+
+                        <?php if (!empty($producto['imagen']) && file_exists($producto['imagen'])): ?>
+                            <img src="<?php echo $producto['imagen']; ?>" alt="Imagen del producto" width="200">
+                        <?php else: ?>
+                            <p>No hay imagen cargada</p>
+                        <?php endif; ?>
+
+                    </div>
+                        
+                        
 
                     <div class="d-flex justify-content-end mt-4">
                         <a href="gestion_catalogo_productos.php" class="btn btn-secondary me-2">Cancelar</a>

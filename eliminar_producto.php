@@ -58,16 +58,34 @@ try {
         exit();
     }
 
-    // 7. Si no hay relaciones que impidan la eliminación, proceder con el DELETE
+    // 7. Se busca la ruta de la imagen y se comprueba que existe la ruta
+    $sqlruta = $pdo->prepare("SELECT ruta_imagen FROM producto WHERE producto_id = :id");
+    $sqlruta->execute([':id' => $producto_id]);
+    $ruta_imagen = $sqlruta->fetchColumn();
+
+    if (!empty($ruta_imagen) && file_exists($ruta_imagen)) {
+        if (!unlink($ruta_imagen)) {
+        $finalErrorMessage = "No se pudo eliminar la imagen.";
+        header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode($finalErrorMessage) . "&tipo=danger");
+        exit();
+        } 
+    } else {
+        $finalErrorMessage = "El archivo no existe.";
+        header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode($finalErrorMessage) . "&tipo=danger");
+        exit();
+    }
+
+    // 8. Si no hay relaciones que impidan la eliminación, proceder con el DELETE
     $delete = $pdo->prepare("DELETE FROM producto WHERE producto_id = :id");
     $delete->execute([':id' => $producto_id]);
+    
 
-    // 8. Redireccionar con mensaje de éxito
+    // 9. Redireccionar con mensaje de éxito
     header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("Producto eliminado con éxito.") . "&tipo=success");
     exit();
 
 } catch (PDOException $e) {
-    // 9. Capturar cualquier excepción de la base de datos (por ejemplo, si hubiera otra restricción no considerada)
+    // 10. Capturar cualquier excepción de la base de datos (por ejemplo, si hubiera otra restricción no considerada)
     error_log("Error al eliminar producto: " . $e->getMessage()); // Esto es útil para la depuración en los logs del servidor
     header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("Error de base de datos al eliminar el producto: " . $e->getMessage()) . "&tipo=danger");
     exit();
