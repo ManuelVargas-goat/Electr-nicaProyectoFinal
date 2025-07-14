@@ -1,21 +1,10 @@
 <?php
-session_start();
+session_start(); // Inicia la sesión al principio
 include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
     exit();
-}
-
-$error = '';
-
-// Obtener todas las categorías para el dropdown
-$categorias = [];
-try {
-    $stmtCategorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
-    $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Error al cargar categorías: " . $e->getMessage();
 }
 
 // Inicializar variables para mantener los valores en el formulario si hay un error
@@ -27,51 +16,99 @@ $descontinuado = false; // Valor por defecto para el checkbox
 $categoria_id = '';
 $rutaimagen = '';
 
+// Obtener todas las categorías para el dropdown
+$categorias = [];
+try {
+    $stmtCategorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
+    $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // Si hay un error al cargar categorías, registra el error y notifica.
+    error_log("Error al cargar categorías en nuevo_producto.php: " . $e->getMessage());
+    $_SESSION['modal_message'] = "Error interno: No se pudieron cargar las categorías.";
+    $_SESSION['modal_type'] = "danger";
+    // Podrías redirigir o simplemente mostrar el error en esta página
+}
+
+// Variable para errores de validación en este formulario
+$formError = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $descripcion = trim($_POST['descripcion'] ?? '');
     $precio = filter_var($_POST['precio'] ?? '', FILTER_VALIDATE_FLOAT);
     $marca = trim($_POST['marca'] ?? '');
 
-    // Corregir la asignación del valor booleano para 'descontinuado'
-    // Convertimos explícitamente a 1 si está marcado, 0 si no.
-    $descontinuado = isset($_POST['descontinuado']) ? 1 : 0;
+    $descontinuado = isset($_POST['descontinuado']) ? 1 : 0; // Convertimos a 1 si marcado, 0 si no.
 
     $categoria_id = filter_var($_POST['categoria_id'] ?? '', FILTER_VALIDATE_INT);
 
     // Stock inicial se establecerá a 0 por defecto al insertar
     $stock_inicial_default = 0;
-    $directorio = 'ecommerce/imgs/';
-    $tipoArchivo = $_FILES['imagen']['type'];
-    $rutaimagen = $directorio . $nombre. ".png";
+    
+    $directorio = 'ecommerce/imgs/'; // Asegúrate de que esta ruta sea correcta y accesible para escritura
+    $nombreArchivoImagen = ''; // Para almacenar el nombre del archivo final
+    $target_file = ''; // Ruta completa del archivo en el servidor
 
-    if (empty($nombre)) {
-        $error = "El nombre del producto es obligatorio.";
-    } elseif ($precio === false || $precio < 0) {
-        $error = "El precio debe ser un número válido y no negativo.";
-    } elseif ($categoria_id === false || $categoria_id <= 0) {
-        $error = "Debe seleccionar una categoría válida.";
-    } elseif ($tipoArchivo != 'image/png') {
-        $error = "La imagen no es de tipo png.";
+    // Lógica para la carga de la imagen
+    if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
+        // Generar un nombre de archivo único para evitar colisiones
+        $ext = pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION);
+        $nombreArchivoImagen = uniqid('prod_', true) . '.' . $ext; // Nombre único para la imagen
+        $target_file = $directorio . $nombreArchivoImagen;
+        $rutaimagen = $target_file; // Guardamos la ruta relativa en la DB
+
+        $check = getimagesize($_FILES['imagen']['tmp_name']);
+        if($check === false) {
+            $formError = "El archivo no es una imagen válida.";
+        } elseif ($_FILES['imagen']['size'] > 500000) { // Limitar a 500KB
+            $formError = "Lo sentimos, tu archivo es demasiado grande.";
+        } elseif (!in_array($ext, ['png', 'jpg', 'jpeg', 'gif'])) { // Tipos de archivo permitidos
+            $formError = "Solo se permiten archivos JPG, JPEG, PNG y GIF.";
+        }
     } else {
+        $formError = "Debe seleccionar una imagen para el producto.";
+    }
+
+
+    // Validaciones del formulario
+    if (empty($nombre)) {
+        $formError = "El nombre del producto es obligatorio.";
+    } elseif ($precio === false || $precio < 0) {
+        $formError = "El precio debe ser un número válido y no negativo.";
+    } elseif ($categoria_id === false || $categoria_id <= 0) {
+        $formError = "Debe seleccionar una categoría válida.";
+    }
+
+    // Si no hay errores en el formulario ni en la carga de imagen
+    if (empty($formError)) {
         try {
-            move_uploaded_file($_FILES["imagen"]["tmp_name"],$rutaimagen);
-            
-            $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id, ruta_imagen) VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id, :ruta_imagen)");
-            $stmt->execute([
-                ':nombre' => $nombre,
-                ':descripcion' => $descripcion,
-                ':precio' => $precio,
-                ':unidad_stock' => $stock_inicial_default, // Establece stock inicial a 0
-                ':marca' => $marca,
-                ':descontinuado' => $descontinuado, // Ahora será 0 o 1
-                ':categoria_id' => $categoria_id,
-                ':ruta_imagen' => $rutaimagen
-            ]);
-            header("Location: gestion_catalogo_productos.php?status=success_add");
-            exit();
+            // Mover el archivo subido a la ubicación final
+            if (!move_uploaded_file($_FILES["imagen"]["tmp_name"], $target_file)) {
+                $formError = "Error al subir la imagen. Verifique los permisos de la carpeta 'ecommerce/imgs/'.";
+            } else {
+                // Insertar el producto en la base de datos
+                $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id, ruta_imagen) VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id, :ruta_imagen)");
+                $stmt->execute([
+                    ':nombre' => $nombre,
+                    ':descripcion' => $descripcion,
+                    ':precio' => $precio,
+                    ':unidad_stock' => $stock_inicial_default, // Establece stock inicial a 0
+                    ':marca' => $marca,
+                    ':descontinuado' => $descontinuado, // Será 0 o 1
+                    ':categoria_id' => $categoria_id,
+                    ':ruta_imagen' => $rutaimagen // La ruta relativa que se guardará
+                ]);
+
+                // Establecer mensaje de éxito en la sesión y redirigir
+                $_SESSION['modal_message'] = "Producto registrado con éxito.";
+                $_SESSION['modal_type'] = "success";
+                header("Location: gestion_catalogo_productos.php");
+                exit();
+            }
         } catch (PDOException $e) {
-            $error = "Error al guardar el producto: " . $e->getMessage();
+            // Capturar errores de la base de datos
+            error_log("Error al guardar el producto en DB: " . $e->getMessage()); // Para depuración
+            $formError = "Error de base de datos al registrar el producto."; // Mensaje amigable para el usuario
         }
     }
 }
@@ -81,11 +118,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registrar Nuevo Producto</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
     <style>
-        /* Estilos para el tema oscuro */
+        /* Estilos para el tema oscuro - Puedes mover esto a estilos.css si lo usas globalmente */
         body.dark-mode {
             background-color: #343a40; /* Fondo oscuro */
             color: #f8f9fa; /* Texto claro */
@@ -124,8 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="container mt-5">
     <h3 class="main-title">Registrar Nuevo Producto</h3>
 
-    <?php if (isset($error) && !empty($error)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+    <?php if (!empty($formError)): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?= htmlspecialchars($formError) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php endif; ?>
 
     <form method="POST" class="card p-4" enctype="multipart/form-data">
@@ -165,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </label>
         </div>
         <div class="mb-4">
-            <label for="imagen" class="form-label">Imagen</label>
+            <label for="imagen" class="form-label">Imagen (Solo PNG, JPG, JPEG, GIF - Max 500KB)</label>
             <input type="file" name="imagen" id="imagen" class="form-control" required>
         </div>
         <div class="d-flex justify-content-between">

@@ -1,5 +1,5 @@
 <?php
-session_start();
+session_start(); // Inicia la sesión al principio
 include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
 if (!isset($_SESSION['usuario'])) {
@@ -9,13 +9,15 @@ if (!isset($_SESSION['usuario'])) {
 
 // Validar que se reciba un ID de proveedor válido
 if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
+    // Redirige a la página de gestión con un mensaje de error si el ID es inválido
+    $_SESSION['modal_message'] = "ID de proveedor no válido.";
+    $_SESSION['modal_type'] = "danger";
     header("Location: gestion_catalogo_proveedores.php");
     exit();
 }
 
 $proveedor_id = (int)$_GET['id'];
-$error = '';
-$mensaje_exito = '';
+$formError = ''; // Variable para errores de validación en este formulario
 
 // Obtener datos del proveedor existente
 try {
@@ -24,10 +26,19 @@ try {
     $proveedor = $stmtProveedor->fetch(PDO::FETCH_ASSOC);
 
     if (!$proveedor) {
-        die("Proveedor no encontrado.");
+        // Si el proveedor no se encuentra, redirige con un mensaje de error
+        $_SESSION['modal_message'] = "Proveedor no encontrado.";
+        $_SESSION['modal_type'] = "danger";
+        header("Location: gestion_catalogo_proveedores.php");
+        exit();
     }
 } catch (PDOException $e) {
-    die("Error al cargar datos del proveedor: " . $e->getMessage());
+    // Si hay un error de DB al cargar el proveedor
+    error_log("Error al cargar datos del proveedor en editar_proveedor.php: " . $e->getMessage());
+    $_SESSION['modal_message'] = "Error interno al cargar el proveedor.";
+    $_SESSION['modal_type'] = "danger";
+    header("Location: gestion_catalogo_proveedores.php");
+    exit();
 }
 
 // Obtener personas para asociar con proveedor (incluyendo apellido_materno para el desplegable)
@@ -36,7 +47,8 @@ try {
     $stmtPersonas = $pdo->query("SELECT persona_id, nombre, apellido_paterno, apellido_materno FROM persona ORDER BY nombre");
     $personas = $stmtPersonas->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    $error = "Error al cargar personas: " . $e->getMessage();
+    // Manejar error al cargar personas, pero permite que el formulario se muestre
+    $formError = "Error al cargar la lista de personas: " . $e->getMessage();
 }
 
 // Inicializar variables con los datos del proveedor o con valores de POST si se envió el formulario
@@ -51,13 +63,14 @@ $codigo_postal = $proveedor['codigo_postal'];
 if (isset($_GET['persona_id']) && filter_var($_GET['persona_id'], FILTER_VALIDATE_INT)) {
     $new_persona_id_from_url = (int)$_GET['persona_id'];
     $persona_id_selected = $new_persona_id_from_url;
+    // Si la persona fue actualizada/creada desde otra página, mostrar un mensaje de éxito si lo hay
+    if (isset($_SESSION['modal_message']) && $_SESSION['modal_type'] === 'success') {
+        // No necesitamos hacer nada aquí, ya que el mensaje de la sesión ya estará disponible
+        // para ser mostrado en la siguiente carga de la página.
+    }
 }
 
-// También verificar si hay un mensaje de éxito desde la redirección
-if (isset($_GET['mensaje'])) {
-    $mensaje_exito = htmlspecialchars($_GET['mensaje']);
-}
-
+// La variable $mensaje_exito de $_GET ya no es necesaria aquí, se usará $_SESSION
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre_empresa = trim($_POST['nombre_empresa'] ?? '');
@@ -67,16 +80,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $direccion = trim($_POST['direccion'] ?? '');
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
 
+    // Validaciones
     if (empty($nombre_empresa)) {
-        $error = "El nombre de la empresa es obligatorio.";
+        $formError = "El nombre de la empresa es obligatorio.";
     } elseif ($persona_id_selected <= 0) {
-        $error = "Debe seleccionar una persona representante válida.";
+        $formError = "Debe seleccionar una persona representante válida.";
     } elseif (empty($pais_selected)) {
-        $error = "Debe seleccionar un país.";
+        $formError = "Debe seleccionar un país.";
     } elseif (empty($ciudad_selected)) {
-        $error = "Debe seleccionar una ciudad.";
+        $formError = "Debe seleccionar una ciudad.";
     } elseif (empty($direccion)) {
-        $error = "La dirección es obligatoria.";
+        $formError = "La dirección es obligatoria.";
     } else {
         try {
             $sql = "UPDATE proveedor
@@ -97,10 +111,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':codigo_postal' => $codigo_postal,
                 ':id' => $proveedor_id
             ]);
-            header("Location: gestion_catalogo_proveedores.php?status=success_edit");
+
+            // Establecer mensaje de éxito en la sesión y redirigir
+            $_SESSION['modal_message'] = "Proveedor actualizado con éxito.";
+            $_SESSION['modal_type'] = "success";
+            header("Location: gestion_catalogo_proveedores.php");
             exit();
         } catch (PDOException $e) {
-            $error = "Error al actualizar el proveedor: " . $e->getMessage();
+            // Error de base de datos
+            error_log("Error al actualizar el proveedor en DB: " . $e->getMessage());
+            $formError = "Error al actualizar el proveedor: " . $e->getMessage(); // Muestra el error en el formulario
+            // También puedes enviar esto a la sesión para mostrarlo en la página de gestión si prefieres:
+            // $_SESSION['modal_message'] = "Error al actualizar el proveedor.";
+            // $_SESSION['modal_type'] = "danger";
+            // header("Location: gestion_catalogo_proveedores.php");
+            // exit();
         }
     }
 }
@@ -110,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Proveedor</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
@@ -162,12 +188,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="container">
     <h3 class="main-title">Editar Proveedor #<?= htmlspecialchars($proveedor_id) ?></h3>
 
-    <?php if (!empty($error)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+    <?php if (!empty($formError)): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?= htmlspecialchars($formError) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php endif; ?>
-    <?php if (!empty($mensaje_exito)): ?>
-        <div class="alert alert-success"><?= $mensaje_exito ?></div>
-    <?php endif; ?>
+    <?php
+    // **BLOQUE PARA MOSTRAR LA ALERTA DE BOOTSTRAP (si viene de una redirección)**
+    // Esto es para mensajes que pudieron venir de 'nueva_persona.php' o similar
+    $mensajeModal = '';
+    $tipoMensajeModal = '';
+    if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
+        $mensajeModal = $_SESSION['modal_message'];
+        $tipoMensajeModal = $_SESSION['modal_type'];
+        // Limpiar las variables de sesión para que el mensaje no se muestre de nuevo al recargar la página
+        unset($_SESSION['modal_message']);
+        unset($_SESSION['modal_type']);
+    }
+
+    if (!empty($mensajeModal) && !empty($tipoMensajeModal)) {
+        $alertClass = '';
+        switch ($tipoMensajeModal) {
+            case 'success':
+                $alertClass = 'alert-success';
+                break;
+            case 'danger':
+                $alertClass = 'alert-danger';
+                break;
+            case 'warning':
+                $alertClass = 'alert-warning';
+                break;
+            case 'info':
+                $alertClass = 'alert-info';
+                break;
+            default:
+                $alertClass = 'alert-info';
+        }
+        echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
+        echo htmlspecialchars($mensajeModal);
+        echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        echo '</div>';
+    }
+    ?>
 
     <form method="POST" class="card p-4">
         <div class="mb-3">
@@ -196,7 +259,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="col-md-5 d-flex gap-2">
                     <a href="#" id="btnEditarPersona" class="btn btn-outline-info flex-fill" title="Editar o seleccionar persona">
-                        </a>
+                        <?= ($persona_id_selected > 0) ? 'Editar Persona' : 'Seleccionar Persona' ?>
+                    </a>
                     <a href="nueva_persona.php?redirect_to=editar_proveedor.php&proveedor_id=<?= htmlspecialchars($proveedor_id) ?>" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
                         + Nueva Persona
                     </a>
@@ -286,8 +350,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const ciudadSelect = document.getElementById('ciudad');
     const personaSelect = document.getElementById('persona_id');
     const btnEditarPersona = document.getElementById('btnEditarPersona');
-    const btnEliminarPersona = document.getElementById('btnEliminarPersona'); // Nuevo botón de eliminar
-    const proveedorId = <?= json_encode($proveedor_id); ?>; // Pass the supplier ID to JavaScript
+    const btnEliminarPersona = document.getElementById('btnEliminarPersona');
+    const proveedorId = <?= json_encode($proveedor_id); ?>;
 
     function actualizarCiudades() {
         const paisSeleccionado = paisSelect.value;
@@ -300,72 +364,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 opcion.textContent = ciudad;
                 ciudadSelect.appendChild(opcion);
             });
-        } else if (paisSeleccionado !== "") { // Si hay un país seleccionado pero no en la lista predefinida
+        } else if (paisSeleccionado !== "") {
             const opcion = document.createElement('option');
             opcion.value = "Otra";
             opcion.textContent = "Otra";
             ciudadSelect.appendChild(opcion);
         }
-        
-        // Maintain the selected city if the country hasn't changed or is the same
+
         const ciudadSelectedFromPhp = '<?= $ciudad_selected ?>';
         const paisSelectedFromPhp = '<?= $pais_selected ?>';
 
         if (paisSeleccionado === paisSelectedFromPhp) {
             ciudadSelect.value = ciudadSelectedFromPhp;
         } else {
-            // Si el país ha cambiado, resetear la ciudad seleccionada para evitar que se quede un valor obsoleto
-            ciudadSelect.value = ''; 
+            ciudadSelect.value = '';
         }
     }
 
     function actualizarBotonesPersona() {
         const personaIdSeleccionada = personaSelect.value;
+        const proveedor_id = <?= json_encode($proveedor_id); ?>;
 
         // Lógica para el botón "Editar Persona"
         if (personaIdSeleccionada && personaIdSeleccionada !== "") {
-            btnEditarPersona.href = 'editar_persona.php?persona_id=' + personaIdSeleccionada + '&redirect_to=editar_proveedor.php&proveedor_id=' + proveedorId;
+            btnEditarPersona.href = `editar_persona.php?persona_id=${personaIdSeleccionada}&redirect_to=editar_proveedor.php&proveedor_id=${proveedor_id}`;
             btnEditarPersona.textContent = 'Editar Persona';
             btnEditarPersona.classList.remove('disabled');
         } else {
-            btnEditarPersona.href = 'seleccionar_persona.php?redirect_to=editar_proveedor.php&proveedor_id=' + proveedorId;
+            // Si no hay persona seleccionada, el botón "Editar Persona" se convierte en "Seleccionar Persona"
+            btnEditarPersona.href = `seleccionar_persona.php?redirect_to=editar_proveedor.php&proveedor_id=${proveedor_id}`;
             btnEditarPersona.textContent = 'Seleccionar Persona';
-            // btnEditarPersona.classList.add('disabled'); // Podrías deshabilitarlo si no hay persona seleccionada
+            // No se deshabilita, ya que es la acción para seleccionar una persona
+            btnEditarPersona.classList.remove('disabled');
         }
 
         // Lógica para el botón "Eliminar Persona"
         if (personaIdSeleccionada && personaIdSeleccionada !== "") {
             btnEliminarPersona.href = '#'; // El enlace real se manejará en el evento click
             btnEliminarPersona.classList.remove('disabled');
-            btnEliminarPersona.onclick = function() {
-                if (confirm('¿Está seguro de que desea eliminar a esta persona? Esto la desasociará de este proveedor y la eliminará permanentemente del sistema si no está asociada a otros proveedores.')) {
-                    // Redirigir a un script de eliminación
-                    window.location.href = 'eliminar_persona.php?persona_id=' + personaIdSeleccionada + '&redirect_to=editar_proveedor.php&proveedor_id=' + proveedorId;
+            btnEliminarPersona.textContent = 'Eliminar Persona'; // Asegura que siempre tenga texto cuando está activo
+            // Usamos un evento click para mostrar un confirm y luego redirigir
+            btnEliminarPersona.onclick = function(e) {
+                e.preventDefault(); // Prevenir el comportamiento por defecto del enlace
+                if (confirm('¿Está seguro de que desea desasociar y eliminar permanentemente a esta persona del sistema?')) {
+                    // Redirigir a un script de eliminación de persona.
+                    // Se asume que este script manejará la eliminación y la redirección de vuelta con un mensaje.
+                    window.location.href = `eliminar_persona.php?persona_id=${personaIdSeleccionada}&redirect_to=editar_proveedor.php&proveedor_id=${proveedor_id}`;
                 }
-                return false; // Evita la acción por defecto del enlace
             };
         } else {
             btnEliminarPersona.href = '#';
             btnEliminarPersona.classList.add('disabled'); // Deshabilita el botón si no hay persona seleccionada
             btnEliminarPersona.onclick = null; // Elimina el evento click
+            btnEliminarPersona.textContent = 'Eliminar Persona'; // Restaurar texto si se deshabilita
         }
     }
 
     // Event Listeners
     paisSelect.addEventListener('change', actualizarCiudades);
-    personaSelect.addEventListener('change', actualizarBotonesPersona); // Actualiza los dos botones
+    personaSelect.addEventListener('change', actualizarBotonesPersona);
 
     // Call functions on DOM load to set initial state
     document.addEventListener('DOMContentLoaded', function() {
-        // Ensure cities are loaded correctly if a country is already selected
         if (paisSelect.value !== '') {
             actualizarCiudades();
         } else {
-            // If no country is selected initially, ensure the city select is empty
             ciudadSelect.innerHTML = '<option value="">Seleccione un país primero</option>';
         }
-        // Update the initial state of the "Edit Person" and "Delete Person" buttons
-        actualizarBotonesPersona();
+        actualizarBotonesPersona(); // Llama a la función para establecer el estado inicial de los botones
+                                   // Esto asegura que el texto se muestre correctamente al cargar la página
+                                   // si ya hay una persona seleccionada.
 
         // Dark mode logic
         const body = document.body;

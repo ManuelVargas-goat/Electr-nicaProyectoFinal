@@ -160,7 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <option value="">Seleccione</option>
                 <option value="M" <?= ($sexo == 'M') ? 'selected' : '' ?>>Masculino</option>
                 <option value="F" <?= ($sexo == 'F') ? 'selected' : '' ?>>Femenino</option>
-                <option value="O" <?= ($sexo == 'O') ? 'selected' : '' ?>>Otro</option>
             </select>
         </div>
 

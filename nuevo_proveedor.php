@@ -1,23 +1,22 @@
 <?php
-session_start();
-include("config.php");
+session_start(); // Inicia la sesión al principio
+include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
     exit();
 }
 
-$error = '';
-$mensaje_exito = ''; // Para mostrar mensajes de éxito desde nueva_persona.php o editar_persona.php
+$formError = ''; // Variable para errores de validación en este formulario (anteriormente $error)
 
-// Obtener personas para asociar con proveedor
+// Obtener personas para asociar con proveedor (incluyendo apellido_materno para el desplegable)
 $personas = [];
 try {
-    // MODIFICACIÓN AQUÍ: Se selecciona 'apellido_materno' también
     $stmtPersonas = $pdo->query("SELECT persona_id, nombre, apellido_paterno, apellido_materno FROM persona ORDER BY nombre");
     $personas = $stmtPersonas->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    $error = "Error al cargar personas: " . $e->getMessage();
+    // Manejar error al cargar personas, pero permite que el formulario se muestre
+    $formError = "Error al cargar la lista de personas: " . $e->getMessage();
 }
 
 // Inicializar variables para mantener los valores en el formulario si hay un error de POST
@@ -28,13 +27,11 @@ $ciudad_selected = '';
 $direccion = '';
 $codigo_postal = '';
 
-// Verificar si se pasó un persona_id desde la URL (después de crear una nueva persona o editarla)
+// Verificar si se pasó un persona_id desde la URL (después de crear o editar una persona)
+// Si viene de una redirección de 'nueva_persona.php' o 'editar_persona.php'
 if (isset($_GET['persona_id']) && filter_var($_GET['persona_id'], FILTER_VALIDATE_INT)) {
     $persona_id_selected = (int)$_GET['persona_id'];
-}
-// También verificar si hay un mensaje de éxito desde la redirección
-if (isset($_GET['mensaje'])) {
-    $mensaje_exito = htmlspecialchars($_GET['mensaje']);
+    // No necesitamos manejar $_GET['mensaje'] aquí directamente. Se espera que los mensajes se manejen con $_SESSION.
 }
 
 
@@ -46,16 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $direccion = trim($_POST['direccion'] ?? '');
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
 
+    // Validaciones
     if (empty($nombre_empresa)) {
-        $error = "El nombre de la empresa es obligatorio.";
+        $formError = "El nombre de la empresa es obligatorio.";
     } elseif ($persona_id_selected <= 0) {
-        $error = "Debe seleccionar una persona representante válida.";
+        $formError = "Debe seleccionar una persona representante válida.";
     } elseif (empty($pais_selected)) {
-        $error = "Debe seleccionar un país.";
+        $formError = "Debe seleccionar un país.";
     } elseif (empty($ciudad_selected)) {
-        $error = "Debe seleccionar una ciudad.";
+        $formError = "Debe seleccionar una ciudad.";
     } elseif (empty($direccion)) {
-        $error = "La dirección es obligatoria.";
+        $formError = "La dirección es obligatoria.";
     } else {
         try {
             $sql = "INSERT INTO proveedor (nombre_empresa, persona_id, pais, ciudad, direccion, codigo_postal)
@@ -69,10 +67,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':direccion' => $direccion,
                 ':codigo_postal' => $codigo_postal
             ]);
-            header("Location: gestion_catalogo_proveedores.php?status=success_add"); // Agregado status para mensaje de éxito
+
+            // Establecer mensaje de éxito en la sesión y redirigir
+            $_SESSION['modal_message'] = "Proveedor registrado con éxito.";
+            $_SESSION['modal_type'] = "success";
+            header("Location: gestion_catalogo_proveedores.php"); // Redirige a la gestión de proveedores
             exit();
         } catch (PDOException $e) {
-            $error = "Error al registrar el proveedor: " . $e->getMessage();
+            // Error de base de datos
+            error_log("Error al registrar el proveedor en DB: " . $e->getMessage());
+            $formError = "Error al registrar el proveedor: " . $e->getMessage(); // Muestra el error en el formulario
         }
     }
 }
@@ -134,12 +138,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="container">
     <h3 class="main-title">Registrar Nuevo Proveedor</h3>
 
-    <?php if (!empty($error)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+    <?php if (!empty($formError)): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?= htmlspecialchars($formError) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php endif; ?>
-    <?php if (!empty($mensaje_exito)): ?>
-        <div class="alert alert-success"><?= $mensaje_exito ?></div>
-    <?php endif; ?>
+    <?php
+    // **BLOQUE PARA MOSTRAR LA ALERTA DE BOOTSTRAP (si viene de una redirección)**
+    // Esto es para mensajes que pudieron venir de 'nueva_persona.php' o 'editar_persona.php'
+    $mensajeModal = '';
+    $tipoMensajeModal = '';
+    if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
+        $mensajeModal = $_SESSION['modal_message'];
+        $tipoMensajeModal = $_SESSION['modal_type'];
+        // Limpiar las variables de sesión para que el mensaje no se muestre de nuevo al recargar la página
+        unset($_SESSION['modal_message']);
+        unset($_SESSION['modal_type']);
+    }
+
+    if (!empty($mensajeModal) && !empty($tipoMensajeModal)) {
+        $alertClass = '';
+        switch ($tipoMensajeModal) {
+            case 'success':
+                $alertClass = 'alert-success';
+                break;
+            case 'danger':
+                $alertClass = 'alert-danger';
+                break;
+            case 'warning':
+                $alertClass = 'alert-warning';
+                break;
+            case 'info':
+                $alertClass = 'alert-info';
+                break;
+            default:
+                $alertClass = 'alert-info';
+        }
+        echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
+        echo htmlspecialchars($mensajeModal);
+        echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        echo '</div>';
+    }
+    ?>
 
     <form method="POST" class="card p-4">
         <div class="mb-3">
@@ -154,7 +195,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select name="persona_id" id="persona_id" class="form-select" required>
                         <option value="">Seleccione una persona</option>
                         <?php foreach ($personas as $persona):
-                            // MODIFICACIÓN AQUÍ: Se incluye el apellido materno si existe
                             $nombre_completo = htmlspecialchars($persona['nombre'] . ' ' . $persona['apellido_paterno']);
                             if (!empty($persona['apellido_materno'])) {
                                 $nombre_completo .= ' ' . htmlspecialchars($persona['apellido_materno']);
@@ -169,8 +209,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="col-md-5 d-flex gap-2">
                     <a href="#" id="btnEditarPersona" class="btn btn-outline-info flex-fill" title="Editar o seleccionar persona">
-                        </a>
-                    <a href="nueva_persona.php" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
+                        <?= ($persona_id_selected > 0) ? 'Editar Persona' : 'Seleccionar Persona' ?>
+                    </a>
+                    <a href="nueva_persona.php?redirect_to=nuevo_proveedor.php" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
                         + Nueva Persona
                     </a>
                 </div>
@@ -199,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <select name="ciudad" id="ciudad" class="form-select" required>
                 <option value="">Seleccione un país primero</option>
                 <?php
+                // Definir ciudadesPorPais en PHP para que esté disponible si el formulario se recarga con errores
                 $ciudadesPorPais = [
                     "Perú" => ["Arequipa", "Lima", "Cusco", "Trujillo", "Piura"],
                     "Colombia" => ["Bogotá", "Medellín", "Cali", "Barranquilla"],
@@ -216,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </option>
                     <?php endforeach;
                 elseif (!empty($pais_selected) && !isset($ciudadesPorPais[$pais_selected])): ?>
-                     <option value="Otra" selected>Otra</option>
+                    <option value="Otra" selected>Otra</option>
                 <?php endif; ?>
             </select>
         </div>
@@ -267,42 +309,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 opcion.textContent = ciudad;
                 ciudadSelect.appendChild(opcion);
             });
-        } else {
+        } else if (paisSeleccionado !== "") {
             const opcion = document.createElement('option');
             opcion.value = "Otra";
             opcion.textContent = "Otra";
             ciudadSelect.appendChild(opcion);
         }
+
         const ciudadSelectedFromPhp = '<?= $ciudad_selected ?>';
         const paisSelectedFromPhp = '<?= $pais_selected ?>';
 
-        if (ciudadSelectedFromPhp !== '' && paisSeleccionado === paisSelectedFromPhp) {
+        if (paisSeleccionado === paisSelectedFromPhp) {
             ciudadSelect.value = ciudadSelectedFromPhp;
+        } else {
+            ciudadSelect.value = '';
         }
     }
 
     function actualizarBotonEditarPersona() {
         const personaIdSeleccionada = personaSelect.value;
+        const redirectToUrl = 'nuevo_proveedor.php'; // Siempre redirigir a esta página
+
         if (personaIdSeleccionada && personaIdSeleccionada !== "") {
-            btnEditarPersona.href = 'editar_persona.php?persona_id=' + personaIdSeleccionada;
+            btnEditarPersona.href = `editar_persona.php?persona_id=${personaIdSeleccionada}&redirect_to=${redirectToUrl}`;
             btnEditarPersona.textContent = 'Editar Persona';
             btnEditarPersona.classList.remove('disabled');
         } else {
-            btnEditarPersona.href = 'seleccionar_persona.php';
+            btnEditarPersona.href = `seleccionar_persona.php?redirect_to=${redirectToUrl}`;
             btnEditarPersona.textContent = 'Seleccionar Persona';
             btnEditarPersona.classList.remove('disabled');
         }
     }
 
+    // Event Listeners
     paisSelect.addEventListener('change', actualizarCiudades);
     personaSelect.addEventListener('change', actualizarBotonEditarPersona);
 
+    // Call functions on DOM load to set initial state
     document.addEventListener('DOMContentLoaded', function() {
         if (paisSelect.value !== '') {
             actualizarCiudades();
+        } else {
+            // Asegura que al cargar la página si no hay país seleccionado, el select de ciudad muestre el mensaje correcto
+            ciudadSelect.innerHTML = '<option value="">Seleccione un país primero</option>';
         }
-        actualizarBotonEditarPersona();
+        actualizarBotonEditarPersona(); // Llama a la función para establecer el estado inicial del botón
+                                      // Esto asegura que el texto se muestre correctamente al cargar la página
+                                      // si ya hay una persona seleccionada por PHP.
 
+        // Dark mode logic
         const body = document.body;
         if (localStorage.getItem('darkMode') === 'enabled') {
             body.classList.add('dark-mode');

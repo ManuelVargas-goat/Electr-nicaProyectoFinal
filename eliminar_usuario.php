@@ -1,245 +1,191 @@
 <?php
-session_start();
+session_start(); // Inicia la sesión al principio
 include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
-// Verificar si el usuario ha iniciado sesión y tiene permisos de administrador.
-// **IMPORTANTE**: Asegúrate de que $_SESSION['rol_id'] se establezca correctamente en tu login.php.
-// Ajusta '1' al ID del rol que corresponde a un administrador en tu base de datos.
-if (!isset($_SESSION['usuario']) || !isset($_SESSION['rol_id']) || $_SESSION['rol_id'] != 1) {
-    // Si no está logueado o no es admin, redirigir al login o a una página de acceso denegado
-    header("Location: login.php?error=acceso_denegado");
+// =================================================================
+// VERIFICACIÓN DE PERMISOS
+// =================================================================
+if (!isset($_SESSION['usuario'])) {
+    $_SESSION['alert_message'] = "Acceso denegado. Debes iniciar sesión para realizar esta acción."; // Cambiado a alert_message
+    $_SESSION['alert_type'] = "danger"; // Cambiado a alert_type
+    header("Location: gestion_usuarios.php"); // Redirigir de vuelta
     exit();
 }
 
-$usuario_empleado_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
-if ($usuario_empleado_id === 0) {
-    // Si no se proporciona un ID válido, redirigir con un error
-    header("Location: gestion_usuarios.php?status=error_invalid_id");
-    exit();
+// Obtener el ID de empleado de la sesión si existe, para la prevención de auto-eliminación
+$loggedInEmployeeId = null;
+// Asumiendo que 'usuario_empleado_id' es el ID de la persona empleado logueada
+// Debes asegurarte de que este valor se guarde en la sesión al loguearse.
+if (isset($_SESSION['usuario_empleado_id'])) {
+    $loggedInEmployeeId = $_SESSION['usuario_empleado_id'];
 }
 
-$mensaje = '';
-$claseMensaje = '';
+// Solo procesamos si el método de solicitud es POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user_id = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+    $user_type = filter_input(INPUT_POST, 'user_type', FILTER_SANITIZE_STRING);
 
-// Obtener los datos del usuario para mostrar en la confirmación
-$userData = null;
-try {
-    $sqlUser = "SELECT ue.usuario, p.nombre, p.apellido_paterno, p.apellido_materno, ue.estado
-                 FROM usuario_empleado ue
-                 JOIN persona p ON ue.persona_id = p.persona_id
-                 WHERE ue.usuario_empleado_id = :usuario_empleado_id";
-    $stmtUser = $pdo->prepare($sqlUser);
-    $stmtUser->execute([':usuario_empleado_id' => $usuario_empleado_id]);
-    $userData = $stmtUser->fetch(PDO::FETCH_ASSOC);
-
-    if (!$userData) {
-        // Si el usuario no se encuentra, redirigir a la gestión de usuarios
-        header("Location: gestion_usuarios.php?status=error_notfound");
+    if ($user_id === false || !in_array($user_type, ['empleado', 'cliente'])) {
+        $_SESSION['alert_message'] = "Datos de usuario no válidos o incompletos para eliminar.";
+        $_SESSION['alert_type'] = "danger";
+        header("Location: gestion_usuarios.php");
         exit();
     }
-} catch (PDOException $e) {
-    error_log("Error al cargar datos del usuario para eliminación: " . $e->getMessage());
-    $mensaje = "Error al cargar los datos del usuario. Intente de nuevo.";
-    $claseMensaje = 'alert-danger';
-}
 
-// Procesar la solicitud de eliminación (o inactivación)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete'])) {
-    // Verificar si el usuario está intentando inactivarse a sí mismo
-    if ($usuario_empleado_id == $_SESSION['usuario_empleado_id']) { // Asume que guardas el ID del usuario logueado en la sesión
-        $mensaje = "No puedes inactivar tu propia cuenta mientras estás logueado.";
-        $claseMensaje = 'alert-warning';
-    } else {
-        try {
-            // **IMPORTANTE**: Lógica para verificar relaciones existentes
-            // Ajusta estas consultas SQL a las tablas reales que tienen FK a usuario_empleado_id
-            $hasRelations = false;
+    $canDelete = true;
+    $errorMessage = "";
+    $persona_id = null; // Inicializar persona_id
 
-            // Ejemplo 1: Verificar en la tabla 'orden'
-            $stmtOrden = $pdo->prepare("SELECT COUNT(*) FROM orden WHERE usuario_empleado_id = :id");
-            $stmtOrden->execute([':id' => $usuario_empleado_id]);
-            if ($stmtOrden->fetchColumn() > 0) {
-                $hasRelations = true;
-                $mensaje = "No se puede inactivar este usuario porque tiene órdenes asociadas.";
-            }
-
-            // Ejemplo 2: Verificar en la tabla 'venta' (si existiera)
-            if (!$hasRelations) { // Solo si no se encontró relación en la tabla anterior
-                $stmtVenta = $pdo->prepare("SELECT COUNT(*) FROM venta WHERE usuario_empleado_id = :id");
-                $stmtVenta->execute([':id' => $usuario_empleado_id]);
-                if ($stmtVenta->fetchColumn() > 0) {
-                    $hasRelations = true;
-                    $mensaje = "No se puede inactivar este usuario porque tiene ventas registradas.";
-                }
-            }
-
-            // Agrega más verificaciones si tienes otras tablas relacionadas
-            // Ejemplo 3: Verificar en la tabla 'registro_actividad'
-            /*
-            if (!$hasRelations) {
-                $stmtActividad = $pdo->prepare("SELECT COUNT(*) FROM registro_actividad WHERE usuario_empleado_id = :id");
-                $stmtActividad->execute([':id' => $usuario_empleado_id]);
-                if ($stmtActividad->fetchColumn() > 0) {
-                    $hasRelations = true;
-                    $mensaje = "No se puede inactivar este usuario porque tiene registros de actividad.";
-                }
-            }
-            */
-
-            if ($hasRelations) {
-                $claseMensaje = 'alert-warning';
+    try {
+        if ($user_type === 'empleado') {
+            // Prevention: Don't allow the logged-in user (employee) to delete themselves
+            if ($loggedInEmployeeId !== null && $loggedInEmployeeId == $user_id) {
+                $canDelete = false;
+                $errorMessage = "No puedes eliminar tu propia cuenta de empleado.";
             } else {
-                // Si no hay relaciones, proceder con la inactivación
-                $stmt = $pdo->prepare("UPDATE usuario_empleado SET estado = 0 WHERE usuario_empleado_id = :id");
-                $stmt->execute([':id' => $usuario_empleado_id]);
+                // Get persona_id and rol for usuario_empleado
+                $stmt_get_employee_data = $pdo->prepare("SELECT ue.persona_id, r.nombre AS rol_nombre FROM usuario_empleado ue JOIN rol r ON ue.rol_id = r.rol_id WHERE ue.usuario_empleado_id = :id");
+                $stmt_get_employee_data->execute([':id' => $user_id]);
+                $employee_data = $stmt_get_employee_data->fetch(PDO::FETCH_ASSOC);
 
-                // Redirigir después de una inactivación exitosa
-                header("Location: gestion_usuarios.php?status=success_delete");
-                exit();
+                if ($employee_data) {
+                    $persona_id = $employee_data['persona_id'];
+                    $rol_empleado = strtolower($employee_data['rol_nombre']);
+
+                    // Further prevention: Don't allow deletion of an 'administrador'
+                    if ($rol_empleado === 'administrador' || $rol_empleado === 'admin') {
+                        $canDelete = false;
+                        $errorMessage = "No se puede eliminar un usuario con rol de 'Administrador' directamente.";
+                    }
+                } else {
+                    $canDelete = false;
+                    $errorMessage = "Usuario empleado no encontrado.";
+                }
+
+                if ($canDelete) {
+                    // =================================================================
+                    // ASSOCIATION CHECKS FOR usuario_empleado
+                    // =================================================================
+                    $stmtPedidos = $pdo->prepare("SELECT COUNT(*) FROM pedido WHERE usuario_empleado_id = :id");
+                    $stmtPedidos->execute([':id' => $user_id]);
+                    $pedidosAsociados = $stmtPedidos->fetchColumn();
+                    if ($pedidosAsociados > 0) {
+                        $canDelete = false;
+                        $errorMessage .= "El empleado ha registrado " . $pedidosAsociados . " pedido(s). ";
+                    }
+
+                    $stmtDevolucionesEmpleado = $pdo->prepare("SELECT COUNT(*) FROM devolucion WHERE usuario_empleado_id = :id");
+                    $stmtDevolucionesEmpleado->execute([':id' => $user_id]);
+                    $devolucionesEmpleadoAsociadas = $stmtDevolucionesEmpleado->fetchColumn();
+                    if ($devolucionesEmpleadoAsociadas > 0) {
+                        $canDelete = false;
+                        $errorMessage .= "El empleado ha gestionado " . $devolucionesEmpleadoAsociadas . " devolución(es). ";
+                    }
+                }
+            }
+        } elseif ($user_type === 'cliente') {
+            // Get persona_id for usuario_cliente
+            $stmt_get_person_id = $pdo->prepare("SELECT persona_id FROM usuario_cliente WHERE usuario_cliente_id = :id");
+            $stmt_get_person_id->execute([':id' => $user_id]);
+            $persona_data = $stmt_get_person_id->fetch(PDO::FETCH_ASSOC);
+
+            if ($persona_data) {
+                $persona_id = $persona_data['persona_id'];
+            } else {
+                $canDelete = false;
+                $errorMessage = "Usuario cliente no encontrado.";
             }
 
-        } catch (PDOException $e) {
-            $mensaje = "Error al procesar la solicitud: " . $e->getMessage();
-            $claseMensaje = 'alert-danger';
-            error_log("Error al eliminar/inactivar usuario: " . $e->getMessage());
+            if ($canDelete) {
+                // =================================================================
+                // ASSOCIATION CHECKS FOR usuario_cliente
+                // =================================================================
+                $stmtCompras = $pdo->prepare("SELECT COUNT(*) FROM compra WHERE usuario_cliente_id = :id");
+                $stmtCompras->execute([':id' => $user_id]);
+                $comprasAsociadas = $stmtCompras->fetchColumn();
+                if ($comprasAsociadas > 0) {
+                    $canDelete = false;
+                    $errorMessage .= "El cliente ha realizado " . $comprasAsociadas . " compra(s). ";
+                }
+
+                $stmtDevolucionesCliente = $pdo->prepare("SELECT COUNT(*) FROM devolucion WHERE usuario_cliente_id = :id");
+                $stmtDevolucionesCliente->execute([':id' => $user_id]);
+                $devolucionesClienteAsociadas = $stmtDevolucionesCliente->fetchColumn();
+                if ($devolucionesClienteAsociadas > 0) {
+                    $canDelete = false;
+                    $errorMessage .= "El cliente ha realizado " . $devolucionesClienteAsociadas . " devolución(es). ";
+                }
+            }
         }
+
+        // =================================================================
+        // PROCEED WITH DELETION IF POSSIBLE (Transaction starts here)
+        // =================================================================
+        if (!$canDelete) {
+            $_SESSION['alert_message'] = "No se puede eliminar el usuario. " . $errorMessage . " Considere desactivar la cuenta en su lugar.";
+            $_SESSION['alert_type'] = "danger";
+        } else {
+            // Si todo está bien y podemos eliminar, INICIAMOS LA TRANSACCIÓN AQUÍ
+            $pdo->beginTransaction();
+
+            if ($user_type === 'empleado') {
+                $delete_stmt = $pdo->prepare("DELETE FROM usuario_empleado WHERE usuario_empleado_id = :id");
+            } else { // cliente
+                $delete_stmt = $pdo->prepare("DELETE FROM usuario_cliente WHERE usuario_cliente_id = :id");
+            }
+            $delete_stmt->execute([':id' => $user_id]);
+
+            // Eliminar de la tabla persona si persona_id fue obtenido y no está asociada a otro usuario/proveedor
+            if ($persona_id) {
+                // Validamos si la persona_id está asociada a algún otro empleado, cliente o proveedor
+                $stmt_check_other_uses = $pdo->prepare("
+                    SELECT COUNT(*) FROM usuario_empleado WHERE persona_id = :persona_id
+                    UNION ALL
+                    SELECT COUNT(*) FROM usuario_cliente WHERE persona_id = :persona_id
+                    UNION ALL
+                    SELECT COUNT(*) FROM proveedor WHERE persona_id = :persona_id
+                ");
+                $stmt_check_other_uses->execute([':persona_id' => $persona_id]);
+                $total_uses = 0;
+                while ($row = $stmt_check_other_uses->fetchColumn()) {
+                    $total_uses += $row;
+                }
+
+                // Si después de eliminar el usuario actual, la persona_id ya no es referenciada, se elimina.
+                if ($total_uses == 0) {
+                    $delete_persona_stmt = $pdo->prepare("DELETE FROM persona WHERE persona_id = :persona_id");
+                    $delete_persona_stmt->execute([':persona_id' => $persona_id]);
+                }
+            }
+
+            $pdo->commit(); // Confirma la transacción
+            $_SESSION['alert_message'] = "Usuario (" . $user_type . ") y sus datos personales eliminados con éxito.";
+            $_SESSION['alert_type'] = "success";
+        }
+
+    } catch (PDOException $e) {
+        // Si una transacción está activa, haz rollback
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $_SESSION['alert_message'] = "Error de base de datos al eliminar usuario: " . $e->getMessage();
+        $_SESSION['alert_type'] = "danger";
+        error_log("Error de BD al eliminar usuario (eliminar_usuario.php): " . $e->getMessage());
+    } catch (Exception $e) {
+        // Captura cualquier otra excepción general
+        if ($pdo->inTransaction()) { // Si por algún motivo se inició una transacción y falló
+            $pdo->rollBack();
+        }
+        $_SESSION['alert_message'] = "Error inesperado al eliminar usuario: " . $e->getMessage();
+        $_SESSION['alert_type'] = "danger";
+        error_log("Error inesperado al eliminar usuario (eliminar_usuario.php): " . $e->getMessage());
     }
+} else {
+    $_SESSION['alert_message'] = "Método de solicitud no permitido.";
+    $_SESSION['alert_type'] = "danger";
 }
+
+// Redirigir siempre de vuelta a gestion_usuarios.php
+header("Location: gestion_usuarios.php");
+exit();
 ?>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Confirmar Inactivación de Usuario</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .container.mt-5 {
-            max-width: 600px;
-        }
-        .main-title {
-            color: #dc3545; /* Rojo para indicar una acción de peligro */
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        .card {
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-            border-radius: 0.75rem;
-            border: none;
-            background-color: #ffffff; /* Fondo blanco para la tarjeta de confirmación */
-        }
-        .card-body {
-            text-align: center;
-        }
-        .btn-danger {
-            background-color: #dc3545;
-            border-color: #dc3545;
-        }
-        .btn-danger:hover {
-            background-color: #c82333;
-            border-color: #bd2130;
-        }
-        .btn-secondary {
-            background-color: #6c757d;
-            border-color: #6c757d;
-        }
-        .btn-secondary:hover {
-            background-color: #5a6268;
-            border-color: #545b62;
-        }
-
-        /* Estilos para el tema oscuro */
-        body.dark-mode {
-            background-color: #343a40;
-            color: #f8f9fa;
-        }
-        body.dark-mode .container {
-            background-color: #343a40;
-        }
-        body.dark-mode .main-title {
-            color: #dc3545; /* Mantener rojo para la advertencia */
-        }
-        body.dark-mode .card {
-            background-color: #545b62;
-            border-color: #6c757d;
-        }
-        body.dark-mode .card-body {
-            color: #f8f9fa;
-        }
-        body.dark-mode .alert { /* Estilo para alertas en modo oscuro */
-            color: #343a40; /* Texto oscuro */
-            background-color: #f8d7da; /* Fondo claro para alerta de peligro */
-            border-color: #f5c6cb;
-        }
-        body.dark-mode .alert-danger {
-            background-color: #f5c6cb;
-            border-color: #f1b0b5;
-            color: #721c24;
-        }
-        body.dark-mode .alert-warning { /* Nuevo estilo para alertas de advertencia en modo oscuro */
-            background-color: #ffeeba;
-            border-color: #ffc720;
-            color: #664d03;
-        }
-        body.dark-mode .btn-close {
-            filter: invert(1); /* Para que la 'x' se vea bien en fondos oscuros */
-        }
-    </style>
-</head>
-<body>
-<div class="container mt-5">
-    <h3 class="main-title"><i class="bi bi-exclamation-triangle-fill"></i> Confirmar Inactivación de Usuario</h3>
-
-    <?php if ($mensaje): ?>
-        <div class="alert <?= $claseMensaje ?> alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars($mensaje) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-    <?php endif; ?>
-
-    <?php if ($userData): ?>
-        <div class="card p-4">
-            <div class="card-body">
-                <?php if ($userData['estado'] == 0): ?>
-                    <p class="lead text-info">El usuario "<?= htmlspecialchars($userData['usuario']) ?>" ya está **inactivo**.</p>
-                    <a href="gestion_usuarios.php" class="btn btn-secondary btn-lg"><i class="bi bi-arrow-left-circle-fill"></i> Volver</a>
-                <?php else: ?>
-                    <p class="lead">¿Estás seguro de que quieres **inactivar** al usuario:</p>
-                    <h5 class="mb-4">"<?= htmlspecialchars($userData['usuario']) ?>" (<?= htmlspecialchars($userData['nombre'] . ' ' . $userData['apellido_paterno'] . ' ' . $userData['apellido_materno']) ?>)?</h5>
-                    <p class="text-danger">Esta acción cambiará su estado a inactivo y ya no podrá iniciar sesión.</p>
-                    <form method="POST">
-                        <input type="hidden" name="confirm_delete" value="1">
-                        <div class="d-flex justify-content-center gap-3">
-                            <a href="gestion_usuarios.php" class="btn btn-secondary btn-lg"><i class="bi bi-x-circle-fill"></i> Cancelar</a>
-                            <button type="submit" class="btn btn-danger btn-lg"><i class="bi bi-person-slash-fill"></i> Inactivar Usuario</button>
-                        </div>
-                    </form>
-                <?php endif; ?>
-            </div>
-        </div>
-    <?php else: ?>
-        <div class="alert alert-warning text-center" role="alert">
-            No se encontraron datos para el usuario especificado.
-            <a href="gestion_usuarios.php" class="alert-link">Volver a la gestión de usuarios</a>.
-        </div>
-    <?php endif; ?>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    // Lógica para el Modo Oscuro
-    document.addEventListener('DOMContentLoaded', (event) => {
-        const body = document.body;
-        if (localStorage.getItem('darkMode') === 'enabled') {
-            body.classList.add('dark-mode');
-        }
-    });
-</script>
-</body>
-</html>

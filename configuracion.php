@@ -41,107 +41,122 @@ if ($personaId) {
     $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
 }
 
-// Lógica para actualizar perfil
+// **LÓGICA MEJORADA PARA MENSAJES (Prioriza SESSION, luego POST)**
 $mensaje = '';
-$claseMensaje = '';
+$tipoMensaje = ''; // Puede ser 'success', 'danger', 'warning', 'info'
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
-    $nombre = trim($_POST['nombre'] ?? '');
-    $apellido_paterno = trim($_POST['apellido_paterno'] ?? '');
-    $apellido_materno = trim($_POST['apellido_materno'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $direccion = trim($_POST['direccion'] ?? '');
-    $telefono = trim($_POST['telefono'] ?? '');
-    $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
-    $sexo = trim($_POST['sexo'] ?? '');
+// Check for messages from session (e.g., redirect after an action)
+if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
+    $mensaje = $_SESSION['modal_message'];
+    $tipoMensaje = $_SESSION['modal_type'];
+    // Clear session variables so the message doesn't reappear on refresh
+    unset($_SESSION['modal_message']);
+    unset($_SESSION['modal_type']);
+}
 
-    // Validaciones básicas (puedes añadir más si es necesario)
-    if (empty($nombre) || empty($apellido_paterno) || empty($email)) {
-        $mensaje = 'Por favor, complete los campos obligatorios (Nombre, Apellido Paterno, Email).';
-        $claseMensaje = 'alert-danger';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $mensaje = 'El formato del email no es válido.';
-        $claseMensaje = 'alert-danger';
-    } else {
-        try {
-            $sqlUpdate = "UPDATE persona SET
-                          nombre = :nombre,
-                          apellido_paterno = :apellido_paterno,
-                          apellido_materno = :apellido_materno,
-                          email = :email,
-                          direccion = :direccion,
-                          telefono = :telefono,
-                          fecha_nacimiento = :fecha_nacimiento,
-                          sexo = :sexo
-                          WHERE persona_id = :persona_id";
+// Lógica para actualizar perfil o cambiar contraseña (procesa solo si no hay mensaje de sesión pendiente)
+if (empty($mensaje)) { // Only process if no session message is pending
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+        $nombre = trim($_POST['nombre'] ?? '');
+        $apellido_paterno = trim($_POST['apellido_paterno'] ?? '');
+        $apellido_materno = trim($_POST['apellido_materno'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $direccion = trim($_POST['direccion'] ?? '');
+        $telefono = trim($_POST['telefono'] ?? '');
+        $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
+        $sexo = trim($_POST['sexo'] ?? '');
 
-            $stmtUpdate = $pdo->prepare($sqlUpdate);
-            $stmtUpdate->bindParam(':nombre', $nombre);
-            $stmtUpdate->bindParam(':apellido_paterno', $apellido_paterno);
-            $stmtUpdate->bindParam(':apellido_materno', $apellido_materno);
-            $stmtUpdate->bindParam(':email', $email);
-            $stmtUpdate->bindParam(':direccion', $direccion);
-            $stmtUpdate->bindParam(':telefono', $telefono);
-            $stmtUpdate->bindParam(':fecha_nacimiento', $fecha_nacimiento);
-            $stmtUpdate->bindParam(':sexo', $sexo);
-            $stmtUpdate->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
+        // Validaciones básicas (puedes añadir más si es necesario)
+        if (empty($nombre) || empty($apellido_paterno) || empty($email)) {
+            $mensaje = 'Por favor, complete los campos obligatorios (Nombre, Apellido Paterno, Email).';
+            $tipoMensaje = 'danger';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $mensaje = 'El formato del email no es válido.';
+            $tipoMensaje = 'danger';
+        } else {
+            try {
+                $sqlUpdate = "UPDATE persona SET
+                              nombre = :nombre,
+                              apellido_paterno = :apellido_paterno,
+                              apellido_materno = :apellido_materno,
+                              email = :email,
+                              direccion = :direccion,
+                              telefono = :telefono,
+                              fecha_nacimiento = :fecha_nacimiento,
+                              sexo = :sexo
+                              WHERE persona_id = :persona_id";
 
-            if ($stmtUpdate->execute()) {
-                $mensaje = '¡Perfil actualizado con éxito!';
-                $claseMensaje = 'alert-success';
-                // Volver a cargar los datos del perfil para reflejar los cambios
-                $stmtPerfil = $pdo->prepare($sqlPerfil);
-                $stmtPerfil->execute([':persona_id' => $personaId]);
-                $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
+                $stmtUpdate = $pdo->prepare($sqlUpdate);
+                $stmtUpdate->bindParam(':nombre', $nombre);
+                $stmtUpdate->bindParam(':apellido_paterno', $apellido_paterno);
+                $stmtUpdate->bindParam(':apellido_materno', $apellido_materno);
+                $stmtUpdate->bindParam(':email', $email);
+                $stmtUpdate->bindParam(':direccion', $direccion);
+                $stmtUpdate->bindParam(':telefono', $telefono);
+                $stmtUpdate->bindParam(':fecha_nacimiento', $fecha_nacimiento);
+                $stmtUpdate->bindParam(':sexo', $sexo);
+                $stmtUpdate->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
-                // Actualizar el nombre del usuario en el sidebar si ha cambiado
-                $nombreUsuario = $perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno'];
+                if ($stmtUpdate->execute()) {
+                    $mensaje = '¡Perfil actualizado con éxito!';
+                    $tipoMensaje = 'success';
+                    // Volver a cargar los datos del perfil para reflejar los cambios
+                    $stmtPerfil = $pdo->prepare($sqlPerfil);
+                    $stmtPerfil->execute([':persona_id' => $personaId]);
+                    $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
 
-            } else {
-                $mensaje = 'Error al actualizar el perfil. Inténtelo de nuevo.';
-                $claseMensaje = 'alert-danger';
+                    // Actualizar el nombre del usuario en el sidebar si ha cambiado
+                    $nombreUsuario = $perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno'];
+
+                } else {
+                    $mensaje = 'Error al actualizar el perfil. Inténtelo de nuevo.';
+                    $tipoMensaje = 'danger';
+                }
+            } catch (PDOException $e) {
+                $mensaje = 'Error de base de datos: ' . $e->getMessage();
+                $tipoMensaje = 'danger';
             }
-        } catch (PDOException $e) {
-            $mensaje = 'Error de base de datos: ' . $e->getMessage();
-            $claseMensaje = 'alert-danger';
         }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
-    $new_password = $_POST['new_password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
+        $new_password = $_POST['new_password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
 
-    if (empty($new_password) || empty($confirm_password)) {
-        $mensaje = 'Por favor, ingrese y confirme la nueva contraseña.';
-        $claseMensaje = 'alert-danger';
-    } elseif ($new_password !== $confirm_password) {
-        $mensaje = 'Las contraseñas no coinciden.';
-        $claseMensaje = 'alert-danger';
-    } elseif (strlen($new_password) < 6) {
-        $mensaje = 'La contraseña debe tener al menos 6 caracteres.';
-        $claseMensaje = 'alert-danger';
-    } else {
-        try {
-            // En una aplicación real, usar password_hash() para almacenar contraseñas de forma segura
-            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+        if (empty($new_password) || empty($confirm_password)) {
+            $mensaje = 'Por favor, ingrese y confirme la nueva contraseña.';
+            $tipoMensaje = 'danger';
+        } elseif ($new_password !== $confirm_password) {
+            $mensaje = 'Las contraseñas no coinciden.';
+            $tipoMensaje = 'danger';
+        } elseif (strlen($new_password) < 6) {
+            $mensaje = 'La contraseña debe tener al menos 6 caracteres.';
+            $tipoMensaje = 'danger';
+        } else {
+            try {
+                // En una aplicación real, usar password_hash() para almacenar contraseñas de forma segura
+                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-            $sqlUpdatePassword = "UPDATE usuario_empleado SET password = :password WHERE persona_id = :persona_id";
-            $stmtUpdatePassword = $pdo->prepare($sqlUpdatePassword);
-            $stmtUpdatePassword->bindParam(':password', $hashed_password);
-            $stmtUpdatePassword->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
+                $sqlUpdatePassword = "UPDATE usuario_empleado SET password = :password WHERE persona_id = :persona_id";
+                $stmtUpdatePassword = $pdo->prepare($sqlUpdatePassword);
+                $stmtUpdatePassword->bindParam(':password', $hashed_password);
+                $stmtUpdatePassword->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
-            if ($stmtUpdatePassword->execute()) {
-                $mensaje = '¡Contraseña cambiada con éxito!';
-                $claseMensaje = 'alert-success';
-            } else {
-                $mensaje = 'Error al cambiar la contraseña. Inténtelo de nuevo.';
-                $claseMensaje = 'alert-danger';
+                if ($stmtUpdatePassword->execute()) {
+                    $mensaje = '¡Contraseña cambiada con éxito!';
+                    $tipoMensaje = 'success';
+                } else {
+                    $mensaje = 'Error al cambiar la contraseña. Inténtelo de nuevo.';
+                    $tipoMensaje = 'danger';
+                }
+            } catch (PDOException $e) {
+                $mensaje = 'Error de base de datos al cambiar la contraseña: ' . $e->getMessage();
+                $tipoMensaje = 'danger';
             }
-        } catch (PDOException $e) {
-            $mensaje = 'Error de base de datos al cambiar la contraseña: ' . $e->getMessage();
-            $claseMensaje = 'alert-danger';
         }
     }
 }
+
+// Variable para el nombre del archivo actual (sin la extensión .php)
+$currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
 ?>
 
@@ -153,23 +168,139 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
     <style>
-        /* CSS para el submenu */
-        .submenu {
-            display: none;
-            padding-left: 20px;
+        /* CSS para el sidebar y submenús (duplicado del archivo de ventas para consistencia) */
+        .sidebar {
+            background-color: #1a202c; /* Color de fondo oscuro para el sidebar */
+            color: #e0e0e0;
+            padding-top: 20px;
+            min-height: 100vh;
         }
-        .submenu.active {
-            display: block;
+
+        .user-box {
+            border-bottom: 1px solid #364052;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
         }
+
+        .user-box img {
+            border: 2px solid #ffc107;
+        }
+
+        .user-box .fw-bold {
+            color: #ffffff; /* Color blanco para el nombre del usuario */
+        }
+
+        .user-box .text-warning {
+            color: #ffc107 !important; /* Color amarillo para el rol de administrador */
+        }
+
+        .user-box .text-light {
+            color: #f8f9fa !important; /* Color claro para otros roles */
+        }
+
         .sidebar a {
             display: block;
             padding: 8px 15px;
-            color: #ffffff;
+            color: #e0e0e0; /* Color gris claro por defecto para el texto normal */
             text-decoration: none;
-        }
-        .sidebar a:hover, .sidebar a.active {
-            background-color: #575757;
             border-radius: 5px;
+            margin-bottom: 5px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .sidebar a:hover {
+            background-color: #495057; /* Fondo un poco más oscuro al pasar el ratón */
+            color: #ffffff; /* Color blanco al pasar el ratón */
+        }
+
+        /* Estilo para el enlace de la página ACTUAL */
+        .sidebar a.current-page {
+            background-color: #495057; /* Fondo gris oscuro */
+            color: #ffc107 !important; /* Texto amarillo anaranjado */
+            font-weight: bold;
+        }
+
+        /* Submenú */
+        .submenu {
+            display: none; /* Oculto por defecto */
+            padding-left: 20px; /* Indentación */
+        }
+
+        .submenu.active {
+            display: block; /* Visible cuando está activo */
+        }
+
+        .submenu a {
+            padding: 6px 0 6px 15px; /* Ajuste para sub-ítems */
+            font-size: 0.9em;
+            color: #e0e0e0; /* Color por defecto para sub-ítems */
+        }
+
+        /* Asegurarse que los sub-enlaces activos también tienen el color */
+        .submenu a.current-page {
+            background-color: #495057; /* Fondo gris oscuro para submenú activo */
+            color: #ffc107 !important; /* Texto amarillo anaranjado para submenú activo */
+        }
+
+        /* Estilo para el botón "Volver al Inicio" */
+        .sidebar .btn-outline-primary {
+            background-color: #1a202c; /* Fondo azul oscuro, mismo que el sidebar */
+            color: #ffffff; /* Texto blanco */
+            border-color: #007bff; /* Borde azul */
+            font-weight: bold;
+        }
+
+        .sidebar .btn-outline-primary:hover {
+            background-color: #2c3447; /* Un poco más claro al pasar el ratón */
+            color: #ffffff;
+            border-color: #007bff; /* Borde azul se mantiene */
+        }
+
+        /* Estilo para el botón de búsqueda y otros botones de formulario */
+        .btn-primary {
+            background-color: #007bff; /* Azul de Bootstrap */
+            border-color: #007bff;
+            font-weight: bold;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+        .btn-info {
+            background-color: #17a2b8; /* Azul claro de Bootstrap */
+            border-color: #17a2b8;
+        }
+
+        .btn-info:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
+
+        .btn-danger {
+            background-color: #dc3545; /* Rojo de Bootstrap */
+            border-color: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* Gris de Bootstrap */
+            border-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5c636a;
+            border-color: #565e64;
+        }
+
+        /* Contenido principal */
+        .content {
+            padding: 20px;
         }
 
         /* Estilos para el tema oscuro */
@@ -225,30 +356,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 </div>
             </div>
 
-            <a href="#" id="catalogoToggle">Gestión de Catálogo</a>
-            <div class="submenu" id="catalogoSubmenu">
-                <a href="gestion_catalogo_categorias.php">Categorías</a>
-                <a href="gestion_catalogo_productos.php">Productos</a>
-                <a href="gestion_catalogo_proveedores.php">Proveedores</a>
+            <a href="#" id="catalogoToggle"
+               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                <a href="gestion_catalogo_categorias.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                <a href="gestion_catalogo_productos.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                <a href="gestion_catalogo_proveedores.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
             </div>
-            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
-            <a href="gestion_existencias_pedidos.php">Gestión de Existencias</a>
-            <a href="configuracion.php" class="active">Configuración</a>
+            
+            <a href="gestion_usuarios.php"
+               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            
+            <a href="#" id="existenciasToggle" 
+               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                <a href="gestion_existencias_pedidos.php"
+                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                <a href="gestion_existencias_ventas.php"
+                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                <a href="gestion_existencias_devoluciones.php"
+                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                <a href="gestion_existencias_stock.php"
+                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+            </div>
+            
+            <a href="configuracion.php"
+               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
 
-            <div class="mt-4">
-                <a href="principal.php" class="btn btn-outline-primary w-100">Volver al inicio</a>
+            <div class="mt-4 text-center">
+                <a href="principal.php" class="btn btn-outline-primary w-100">Volver al Inicio</a>
             </div>
         </div>
 
         <div class="col-md-10 content">
             <h3 class="main-title">Configuración del Sistema</h3>
 
-            <?php if ($mensaje): ?>
-                <div class="alert <?= $claseMensaje ?> alert-dismissible fade show" role="alert">
-                    <?= htmlspecialchars($mensaje) ?>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-                </div>
-            <?php endif; ?>
+            <?php
+            // **BLOQUE PARA MOSTRAR LA ALERTA DE BOOTSTRAP**
+            if (!empty($mensaje) && !empty($tipoMensaje)) {
+                $alertClass = '';
+                switch ($tipoMensaje) {
+                    case 'success':
+                        $alertClass = 'alert-success';
+                        break;
+                    case 'danger':
+                        $alertClass = 'alert-danger';
+                        break;
+                    case 'warning':
+                        $alertClass = 'alert-warning';
+                        break;
+                    case 'info':
+                        $alertClass = 'alert-info';
+                        break;
+                    default:
+                        $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
+                }
+                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
+                echo htmlspecialchars($mensaje); // Muestra el mensaje escapando caracteres especiales
+                echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'; // Botón para cerrar la alerta
+                echo '</div>';
+            }
+            ?>
 
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
@@ -338,32 +509,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    document.getElementById('catalogoToggle').addEventListener('click', function(event) {
-        event.preventDefault(); // Evita que el enlace redirija inmediatamente
-        var submenu = document.getElementById('catalogoSubmenu');
-        submenu.classList.toggle('active');
-    });
-
-    // Lógica para el Modo Oscuro
-    const darkModeSwitch = document.getElementById('darkModeSwitch');
-    const body = document.body;
-
-    // Cargar preferencia guardada al cargar la página
     document.addEventListener('DOMContentLoaded', (event) => {
+        // Lógica del submenu para "Gestión de Catálogo"
+        const catalogoToggle = document.getElementById('catalogoToggle');
+        const catalogoSubmenu = document.getElementById('catalogoSubmenu');
+
+        // Abre el submenú de catálogo si alguna de sus sub-páginas está activa
+        if (catalogoToggle && catalogoSubmenu && catalogoToggle.classList.contains('current-page')) {
+            catalogoSubmenu.classList.add('active');
+        }
+
+        if (catalogoToggle) { // Solo si el elemento existe
+            catalogoToggle.addEventListener('click', function(e) {
+                e.preventDefault(); // Previene el comportamiento predeterminado del enlace
+                if (catalogoSubmenu) {
+                    catalogoSubmenu.classList.toggle('active'); // Alterna la clase 'active' para mostrar/ocultar
+                }
+            });
+        }
+        
+        // Lógica para el submenú de "Gestión de Existencias"
+        const existenciasToggle = document.getElementById('existenciasToggle');
+        const existenciasSubmenu = document.getElementById('existenciasSubmenu');
+
+        // Abre el submenú de existencias si alguna de sus sub-páginas está activa
+        if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
+             existenciasSubmenu.classList.add('active');
+        }
+        
+        if (existenciasToggle) {
+             existenciasToggle.addEventListener('click', function(e) {
+                 e.preventDefault();
+                 if (existenciasSubmenu) {
+                     existenciasSubmenu.classList.toggle('active');
+                 }
+             });
+        }
+
+        // Lógica para el Modo Oscuro
+        const darkModeSwitch = document.getElementById('darkModeSwitch');
+        const body = document.body;
+
+        // Cargar preferencia guardada al cargar la página
         if (localStorage.getItem('darkMode') === 'enabled') {
             body.classList.add('dark-mode');
             darkModeSwitch.checked = true;
         }
-    });
 
-    darkModeSwitch.addEventListener('change', function() {
-        if (this.checked) {
-            body.classList.add('dark-mode');
-            localStorage.setItem('darkMode', 'enabled');
-        } else {
-            body.classList.remove('dark-mode');
-            localStorage.setItem('darkMode', 'disabled');
-        }
+        darkModeSwitch.addEventListener('change', function() {
+            if (this.checked) {
+                body.classList.add('dark-mode');
+                localStorage.setItem('darkMode', 'enabled');
+            } else {
+                body.classList.remove('dark-mode');
+                localStorage.setItem('darkMode', 'disabled');
+            }
+        });
     });
 </script>
 </body>

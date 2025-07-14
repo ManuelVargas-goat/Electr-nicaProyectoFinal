@@ -1,15 +1,50 @@
 <?php
-session_start();
-include("config.php");
+session_start(); // Inicia la sesión para poder usar variables de sesión
+include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO a tu base de datos.
 
+// Redirecciona al login si el usuario no ha iniciado sesión
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
     exit();
 }
 
-// Mensajes de notificación desde la URL
-$mensaje = $_GET['mensaje'] ?? '';
-$tipoMensaje = $_GET['tipo'] ?? ''; // 'success', 'info', 'danger'
+// Obtener datos del usuario actual (si ya no están en sesión)
+$usuario = $_SESSION['usuario'];
+$sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
+                FROM usuario_empleado ue
+                JOIN persona per ON ue.persona_id = per.persona_id
+                JOIN rol r ON ue.rol_id = r.rol_id
+                WHERE ue.usuario = :usuario";
+$stmt = $pdo->prepare($sql_usuario);
+$stmt->execute([':usuario' => $usuario]);
+$datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Asignar valores
+$nombreCompleto = 'Usuario Desconocido'; // Valor predeterminado
+$rolUsuario = ''; // Valor predeterminado
+if ($datosUsuario) {
+    $nombreCompleto = htmlspecialchars($datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno']);
+    $rolUsuario = strtolower(htmlspecialchars($datosUsuario['rol']));
+}
+
+// **LÓGICA PARA MOSTRAR MENSAJES EN ALERTAS DE BOOTSTRAP**
+// Priorizamos los mensajes almacenados en la sesión (para redirecciones POST)
+// Luego, si no hay en sesión, verificamos los parámetros GET
+$mensaje = '';
+$tipoMensaje = ''; // Puede ser 'success', 'danger', 'warning', 'info'
+
+if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
+    $mensaje = $_SESSION['modal_message'];
+    $tipoMensaje = $_SESSION['modal_type'];
+    // Limpiar las variables de sesión para que el mensaje no se muestre de nuevo al recargar la página
+    unset($_SESSION['modal_message']);
+    unset($_SESSION['modal_type']);
+} elseif (isset($_GET['mensaje']) && !empty($_GET['mensaje'])) {
+    // Si el mensaje viene por GET (para redirecciones GET)
+    $mensaje = $_GET['mensaje'];
+    $tipoMensaje = $_GET['tipo'] ?? 'info'; // 'info' como tipo predeterminado si no se especifica
+}
+
 
 // Procesar acciones (Confirmar/Cancelar Pedido)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -56,7 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $pdo->commit();
-                header("Location: gestion_existencias_pedidos.php?mensaje=" . urlencode("Recepción confirmada y stock actualizado correctamente.") . "&tipo=success");
+                // Usar variables de sesión para el mensaje en redirecciones POST
+                $_SESSION['modal_message'] = "Recepción confirmada y stock actualizado correctamente.";
+                $_SESSION['modal_type'] = "success";
+                header("Location: gestion_existencias_pedidos.php");
                 exit();
 
             } elseif ($accion === 'cancelar') {
@@ -64,35 +102,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([':id' => $pedidoId]);
 
                 $pdo->commit();
-                header("Location: gestion_existencias_pedidos.php?mensaje=" . urlencode("Pedido cancelado correctamente.") . "&tipo=info");
+                $_SESSION['modal_message'] = "Pedido cancelado correctamente.";
+                $_SESSION['modal_type'] = "info";
+                header("Location: gestion_existencias_pedidos.php");
                 exit();
             }
 
         } catch (Exception $e) {
             $pdo->rollBack();
-            header("Location: gestion_existencias_pedidos.php?mensaje=" . urlencode("Error al procesar acción: " . $e->getMessage()) . "&tipo=danger");
+            $_SESSION['modal_message'] = "Error al procesar acción: " . $e->getMessage();
+            $_SESSION['modal_type'] = "danger";
+            header("Location: gestion_existencias_pedidos.php");
             exit();
         }
     }
-}
-
-// Obtener datos del usuario logueado
-$usuario = $_SESSION['usuario'];
-$sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
-                FROM usuario_empleado ue
-                JOIN persona per ON ue.persona_id = per.persona_id
-                JOIN rol r ON ue.rol_id = r.rol_id
-                WHERE ue.usuario = :usuario";
-$stmt = $pdo->prepare($sql_usuario);
-$stmt->execute([':usuario' => $usuario]);
-$datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$nombreCompleto = 'Usuario Desconocido'; 
-$rolUsuario = ''; 
-
-if ($datosUsuario) {
-    $nombreCompleto = $datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno'];
-    $rolUsuario = strtolower($datosUsuario['rol']);
 }
 
 
@@ -109,6 +132,7 @@ $where = [];
 $params = [];
 
 if (!empty($filtroPedidoId)) {
+    // Usar CAST para asegurar que la comparación sea con texto si pedido_id es numérico en la DB
     $where[] = "CAST(p.pedido_id AS TEXT) ILIKE :pedido_id";
     $params[':pedido_id'] = "%$filtroPedidoId%";
 }
@@ -122,19 +146,19 @@ if (!empty($filtroFechaFin)) {
 }
 if (!empty($filtroEstado)) {
     $where[] = "p.estado ILIKE :estado";
-    $params[':estado'] = "$filtroEstado"; 
+    $params[':estado'] = "$filtroEstado";
 }
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
 // Consulta principal para obtener los pedidos y sus detalles
 $sql = "
-    SELECT 
+    SELECT
       p.pedido_id,
       p.fecha_pedido,
       p.estado,
       COALESCE(per.nombre || ' ' || per.apellido_paterno, 'N/A') AS empleado,
-      SUM(dp.cantidad * CASE 
+      SUM(dp.cantidad * CASE
           WHEN dp.precio_unidad = 0 THEN pr.precio
           ELSE dp.precio_unidad
         END
@@ -143,8 +167,8 @@ $sql = "
       json_agg(json_build_object(
         'producto', pr.nombre,
         'cantidad', dp.cantidad,
-        'precio_unitario', 
-          CASE 
+        'precio_unitario',
+          CASE
             WHEN dp.precio_unidad = 0 THEN pr.precio
             ELSE dp.precio_unidad
           END
@@ -163,8 +187,10 @@ $sql = "
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
-?>
 
+// Variable para el nombre del archivo actual (sin la extensión .php)
+$currentPage = basename($_SERVER['PHP_SELF'], ".php");
+?>
 
 <!DOCTYPE html>
 <html lang="es">
@@ -173,6 +199,132 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <title>Gestión de Existencias - Pedidos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
+    <style>
+        /* CSS para el sidebar y submenús (duplicado del archivo de ventas para consistencia) */
+        .sidebar {
+            background-color: #1a202c; /* Color de fondo oscuro para el sidebar */
+            color: #e0e0e0;
+            padding-top: 20px;
+            min-height: 100vh;
+        }
+
+        .user-box {
+            border-bottom: 1px solid #364052;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        .user-box img {
+            border: 2px solid #ffc107;
+        }
+
+        .user-box .fw-bold {
+            color: #ffffff; /* Color blanco para el nombre del usuario */
+        }
+
+        .user-box .text-warning {
+            color: #ffc107 !important; /* Color amarillo para el rol de administrador */
+        }
+
+        .user-box .text-light {
+            color: #f8f9fa !important; /* Color claro para otros roles */
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 8px 15px;
+            color: #e0e0e0; /* Color gris claro por defecto para el texto normal */
+            text-decoration: none;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .sidebar a:hover {
+            background-color: #495057; /* Fondo un poco más oscuro al pasar el ratón */
+            color: #ffffff; /* Color blanco al pasar el ratón */
+        }
+
+        /* Estilo para el enlace de la página ACTUAL */
+        .sidebar a.current-page {
+            background-color: #495057; /* Fondo gris oscuro */
+            color: #ffc107 !important; /* Texto amarillo anaranjado */
+            font-weight: bold;
+        }
+
+        /* Submenú */
+        .submenu {
+            display: none; /* Oculto por defecto */
+            padding-left: 20px; /* Indentación */
+        }
+
+        .submenu.active {
+            display: block; /* Visible cuando está activo */
+        }
+
+        .submenu a {
+            padding: 6px 0 6px 15px; /* Ajuste para sub-ítems */
+            font-size: 0.9em;
+            color: #e0e0e0; /* Color por defecto para sub-ítems */
+        }
+
+        /* Asegurarse que los sub-enlaces activos también tienen el color */
+        .submenu a.current-page {
+            background-color: #495057; /* Fondo gris oscuro para submenú activo */
+            color: #ffc107 !important; /* Texto amarillo anaranjado para submenú activo */
+        }
+
+        /* Estilo para el botón "Volver al Inicio" */
+        .sidebar .btn-outline-primary {
+            background-color: #1a202c; /* Fondo azul oscuro, mismo que el sidebar */
+            color: #ffffff; /* Texto blanco */
+            border-color: #007bff; /* Borde azul */
+            font-weight: bold;
+        }
+
+        .sidebar .btn-outline-primary:hover {
+            background-color: #2c3447; /* Un poco más claro al pasar el ratón */
+            color: #ffffff;
+            border-color: #007bff; /* Borde azul se mantiene */
+        }
+
+        /* Estilo para el botón de búsqueda y otros botones de formulario */
+        .btn-primary {
+            background-color: #007bff; /* Azul de Bootstrap */
+            border-color: #007bff;
+            font-weight: bold;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+        .btn-success {
+            background-color: #28a745; /* Verde de Bootstrap */
+            border-color: #28a745;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* Gris de Bootstrap */
+            border-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            border-color: #545b62;
+        }
+
+        /* Contenido principal */
+        .content {
+            padding: 20px;
+        }
+    </style>
 </head>
 <body>
 <div class="container-fluid">
@@ -180,23 +332,42 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="col-md-2 sidebar">
             <div class="user-box text-center mb-4">
                 <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
-                <div class="fw-bold"><?= htmlspecialchars($nombreCompleto) ?></div>
+                <div class="fw-bold"><?= $nombreCompleto ?></div>
                 <div class="<?= ($rolUsuario === 'admin') ? 'text-warning' : 'text-light' ?> small">
                     <?= ucfirst($rolUsuario === 'admin' ? 'administrador' : $rolUsuario) ?>
                 </div>
             </div>
 
-            <a href="gestion_catalogo_categorias.php">Gestión de Catálogo</a>
-            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
-            <a href="#" class="active">Gestión de Existencias</a>
-            <div class="ps-3">
-                <a href="gestion_existencias_pedidos.php" class="active">Pedidos</a>
-                <a href="gestion_existencias_ventas.php">Ventas</a>
-                <a href="gestion_existencias_devoluciones.php">Devoluciones</a>
-                <a href="gestion_existencias_stock.php">Stock</a>
+            <a href="#" id="catalogoToggle"
+               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                <a href="gestion_catalogo_categorias.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                <a href="gestion_catalogo_productos.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                <a href="gestion_catalogo_proveedores.php"
+                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
             </div>
-            <a href="configuracion.php">Configuración</a>
             
+            <a href="gestion_usuarios.php"
+               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            
+            <a href="#" id="existenciasToggle" 
+               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                <a href="gestion_existencias_pedidos.php"
+                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                <a href="gestion_existencias_ventas.php"
+                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                <a href="gestion_existencias_devoluciones.php"
+                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                <a href="gestion_existencias_stock.php"
+                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+            </div>
+            
+            <a href="configuracion.php"
+               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+
             <div class="mt-4 text-center">
                 <a href="principal.php" class="btn btn-outline-primary w-100">Volver al Inicio</a>
             </div>
@@ -205,12 +376,32 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="col-md-10 content">
             <h3 class="main-title mb-4">Gestión de Existencias - Pedidos</h3>
 
-            <?php if (!empty($mensaje)): ?>
-                <div class="alert alert-<?= htmlspecialchars($tipoMensaje) ?> alert-dismissible fade show" role="alert">
-                    <?= htmlspecialchars($mensaje) ?>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-                </div>
-            <?php endif; ?>
+            <?php
+            // **BLOQUE PARA MOSTRAR LA ALERTA DE BOOTSTRAP**
+            if (!empty($mensaje) && !empty($tipoMensaje)) {
+                $alertClass = '';
+                switch ($tipoMensaje) {
+                    case 'success':
+                        $alertClass = 'alert-success';
+                        break;
+                    case 'danger':
+                        $alertClass = 'alert-danger';
+                        break;
+                    case 'warning':
+                        $alertClass = 'alert-warning';
+                        break;
+                    case 'info':
+                        $alertClass = 'alert-info';
+                        break;
+                    default:
+                        $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
+                }
+                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
+                echo htmlspecialchars($mensaje); // Muestra el mensaje escapando caracteres especiales
+                echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'; // Botón para cerrar la alerta
+                echo '</div>';
+            }
+            ?>
 
             <div class="mb-3">
                 <a href="nuevo_pedido.php" class="btn btn-success">➕ Generar Nuevo Pedido</a>
@@ -263,12 +454,12 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php if (count($resultado) > 0): ?>
                             <?php foreach ($resultado as $row): ?>
                                 <tr class="table-row">
-                                    <td 
-                                        data-bs-toggle="collapse" 
-                                        data-bs-target="#detalle<?= $row['pedido_id'] ?>" 
-                                        class="fw-bold" 
+                                    <td
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#detalle<?= $row['pedido_id'] ?>"
+                                        class="fw-bold"
                                         style="cursor:pointer">
-                                        <?= $row['pedido_id'] ?>
+                                        <?= htmlspecialchars($row['pedido_id']) ?>
                                     </td>
                                     <td><?= htmlspecialchars($row['fecha_pedido']) ?></td>
                                     <td><?= htmlspecialchars($row['empleado']) ?></td>
@@ -276,35 +467,35 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td>S/ <?= number_format($row['total_precio'], 2) ?></td>
                                     <td>
                                         <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : (strtolower($row['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
-                                            <?= ucfirst($row['estado']) ?>
+                                            <?= ucfirst(htmlspecialchars($row['estado'])) ?>
                                         </span>
                                     </td>
                                     <td>
                                         <?php if (!in_array(strtolower($row['estado']), ['entregado', 'cancelado'])): ?>
                                             <div class="dropdown">
-                                                <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Acciones</button>
+                                                <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Acciones</button>
                                                 <ul class="dropdown-menu">
                                                     <li>
                                                         <form method="POST" class="m-0">
-                                                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                                                            <input type="hidden" name="pedido_id" value="<?= htmlspecialchars($row['pedido_id']) ?>">
                                                             <input type="hidden" name="accion" value="confirmar">
                                                             <button type="submit" class="dropdown-item">Confirmar Recepción</button>
                                                         </form>
                                                     </li>
                                                     <li>
                                                         <form method="POST" class="m-0">
-                                                            <input type="hidden" name="pedido_id" value="<?= $row['pedido_id'] ?>">
+                                                            <input type="hidden" name="pedido_id" value="<?= htmlspecialchars($row['pedido_id']) ?>">
                                                             <input type="hidden" name="accion" value="cancelar">
                                                             <button type="submit" class="dropdown-item">Cancelar Pedido</button>
                                                         </form>
                                                     </li>
                                                     <li>
-                                                        <a class="dropdown-item" href="editar_pedido.php?id=<?= $row['pedido_id'] ?>">Modificar</a>
+                                                        <a class="dropdown-item" href="editar_pedido.php?id=<?= htmlspecialchars($row['pedido_id']) ?>">Modificar</a>
                                                     </li>
                                                 </ul>
                                             </div>
                                         <?php else: ?>
-                                            <button class="btn btn-sm btn-secondary" disabled><?= ucfirst($row['estado']) ?></button>
+                                            <button class="btn btn-sm btn-secondary" disabled>No Acciones</button>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -313,16 +504,16 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <div class="p-3 text-start">
                                             <h6 class="fw-bold mb-3">Productos del Pedido</h6>
                                             <ul class="list-group list-group-flush">
-                                                <?php 
+                                                <?php
                                                 $productos_decodificados = json_decode($row['productos'], true);
                                                 if (is_array($productos_decodificados)):
-                                                    foreach ($productos_decodificados as $item): 
+                                                    foreach ($productos_decodificados as $item):
                                                 ?>
-                                                    <li class="list-group-item d-flex justify-content-between">
-                                                        <span><?= htmlspecialchars($item['producto']) ?> (<?= $item['cantidad'] ?> unid.)</span>
-                                                        <span>S/ <?= number_format($item['precio_unitario'], 2) ?></span>
-                                                    </li>
-                                                <?php 
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span><?= htmlspecialchars($item['producto']) ?> (<?= htmlspecialchars($item['cantidad']) ?> unid.)</span>
+                                                            <span>S/ <?= number_format($item['precio_unitario'], 2) ?></span>
+                                                        </li>
+                                                <?php
                                                     endforeach;
                                                 else:
                                                     echo '<li class="list-group-item">No hay productos asociados a este pedido.</li>';
@@ -347,7 +538,44 @@ $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // Lógica del submenu para "Gestión de Catálogo"
+        const catalogoToggle = document.getElementById('catalogoToggle');
+        const catalogoSubmenu = document.getElementById('catalogoSubmenu');
+
+        // Abre el submenú de catálogo si alguna de sus sub-páginas está activa
+        if (catalogoToggle && catalogoSubmenu && catalogoToggle.classList.contains('current-page')) {
+            catalogoSubmenu.classList.add('active');
+        }
+
+        if (catalogoToggle) { // Solo si el elemento existe
+            catalogoToggle.addEventListener('click', function(e) {
+                e.preventDefault(); // Previene el comportamiento predeterminado del enlace
+                if (catalogoSubmenu) {
+                    catalogoSubmenu.classList.toggle('active'); // Alterna la clase 'active' para mostrar/ocultar
+                }
+            });
+        }
+        
+        // Lógica para el submenú de "Gestión de Existencias"
+        const existenciasToggle = document.getElementById('existenciasToggle');
+        const existenciasSubmenu = document.getElementById('existenciasSubmenu');
+
+        // Abre el submenú de existencias si alguna de sus sub-páginas está activa
+        if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
+             existenciasSubmenu.classList.add('active');
+        }
+        
+        if (existenciasToggle) {
+             existenciasToggle.addEventListener('click', function(e) {
+                 e.preventDefault();
+                 if (existenciasSubmenu) {
+                     existenciasSubmenu.classList.toggle('active');
+                 }
+             });
+        }
+
+        // Script para evitar que los dropdowns se cierren al hacer clic dentro
         const dropdowns = document.querySelectorAll('.dropdown-toggle');
         dropdowns.forEach(btn => {
             btn.addEventListener('click', e => e.stopPropagation());
