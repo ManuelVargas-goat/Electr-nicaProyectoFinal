@@ -29,7 +29,51 @@ body {
   color: #111;
 }
 
+.divcontent{
+  margin-left: 150px;
+  margin-right: 150px;
+}
 
+.izquierda_arrow, .derecha_arrow {
+    color: black;
+    font-size: 2rem; 
+}
+.carouselprods, .carousel-control-prev {
+    left: -110px;
+    border-bottom: 0;
+    font-size: 40px;
+    color: #444;
+}
+ 
+.carouselprods, .carousel-control-next {
+    right: -110px;
+    border-bottom: 0;
+    font-size: 40px;
+    color: #444;
+}
+
+.cardprod{
+  height: 450px;
+  width: auto;
+}
+
+.card-head {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 250px;
+  width: auto;
+}
+
+.card-img-top-prod {
+  
+  height: 90%;
+  width: 90%;
+}
+
+p {
+      font-size: 16px;
+    }
 
 .sidebar {
   max-width: 12%;

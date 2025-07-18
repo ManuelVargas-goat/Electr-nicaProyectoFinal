@@ -19,7 +19,7 @@ if($id == ''){
 
     if ($resultado > 0){
 
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, pr.descripcion as descripcion, cat.nombre as categoria
+        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, pr.descripcion as descripcion, cat.nombre as categoria, cat.categoria_id as catid
                               From producto pr INNER JOIN categoria cat 
                               ON cat.categoria_id = pr.categoria_id
                               WHERE producto_id=? LIMIT 1");
@@ -30,6 +30,18 @@ if($id == ''){
         $descripcion = $row['descripcion'];
         $marca = $row['marca'];
         $precio = $row['precio'];
+        $catid = $row['catid'];
+
+
+        $SIMsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen
+                       From producto pr INNER JOIN categoria cat 
+                       ON cat.categoria_id = pr.categoria_id
+                       WHERE pr.categoria_id= :catid
+                       AND producto_id <> :personaid ";
+
+        $stmt = $pdo->prepare($SIMsql);
+        $stmt->execute([':catid' => $catid, ':personaid' => $id]);
+        $resultadoSIM = $stmt->fetchAll();
 
 
     } else {
@@ -137,14 +149,6 @@ if($id == ''){
 
                             <h6>Descripcion:</h6>
                             <p><?=  $descripcion; ?></p>
-                            <ul class="list-inline">
-                                <li class="list-inline-item"> <!-- Por ver, no hay informacion en las tablas -->
-                                    <h6>Colores Disponibles :</h6>
-                                </li>
-                                <li class="list-inline-item"> 
-                                    <p class="text-muted"><strong>Blanco/ Negro</strong></p>
-                                </li>
-                            </ul>
 
                             <h6>Especificaciones:</h6> <!-- Por ver, no hay informacion en las tablas -->
                             <ul class="list-unstyled pb-3">
@@ -185,11 +189,70 @@ if($id == ''){
                         </div>
                     </div>
                 </div>
+
+                <div>
+
+
+                 <!-- Inicio Productos selecionados en general -->
+            <section class="bg-light">
+                <div class="container py-5">
+                    <div class="row text-center py-3">
+                        <div class="col-lg-6 m-auto">
+                            <h1 class="h1">Productos que podrian interesarte</h1>
+                        </div>
+                    </div>
+                    <div class="row">
+
+
+                        <div class="container-fluid bg-trasparent my-4 p-3" style="position: relative;">
+                            <div class="row row-cols-1 row-cols-xs-2 row-cols-sm-2 row-cols-lg-4 g-3">
+
+                                <?php foreach ($resultadoSIM as $rowSIM): ?>
+
+                                    <div class="col">
+                                        <div class="card h-100 shadow-sm"> <img src="../<?= $rowSIM['imagen']; ?>"
+                                                class="card-img-top" alt="..."></a>
+                                            <div class="card-body">
+                                                <div class="h2 card-title text-center"><span
+                                                        class="float-center price-hp"><?= $rowSIM['nombre'] ?></span>
+                                                </div>
+                                                <p class=" my-4"><?= $rowSIM['descripcion'] ?></p>
+                                                <div class="row">
+                                                    <div class="d-grid col-9"><a href="Producto.php?id=<?= $row['id'] ?>"
+                                                            class="btn btn-warning"><?= $rowSIM['precio'] ?></a> </div>
+                                                    <div class="d-grid col-2">
+                                                        <buttton class="btn btn-primary"
+                                                            onclick="addProducto(<?= $rowSIM['id'] ?>)"><i
+                                                                class="fa-solid fa-cart-plus"></i></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                <?php endforeach; ?>
+
+
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+            <!-- Fin Productos selecionados en general -->
+
+
+
+                </div>
             </div>
         </div>
     </section>
     <!-- Fin Card Producto Seleccionado -->
 
+    <section>
+
+    
+    </section>
 
 <!-- Script Contador de Productos en Carrito -->
     <script>
