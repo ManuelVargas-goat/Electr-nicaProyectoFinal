@@ -4,9 +4,15 @@ include("config.php");
 // Obtener categorías para el filtro
 $categoriasLista = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre")->fetchAll();
 
+// Obtener precio mas alto de los productos
+$precioAlto = $pdo->query("SELECT MAX(precio) as precio FROM producto")->fetch(PDO::FETCH_ASSOC);
+
+
 // Parámetros de filtro
 $busqueda = $_GET['buscar'] ?? '';
 $categoriaFiltrada = $_GET['categoria'] ?? '';
+$filtroPrecioMin = $_GET['precio_min'] ?? '';
+$filtroPrecioMax = $_GET['precio_max'] ?? '';
 
 // Consulta dinámica
 $where = [];
@@ -20,6 +26,15 @@ if (!empty($busqueda)) {
 if (!empty($categoriaFiltrada)) {
     $where[] = "p.categoria_id = :categoria";
     $params[':categoria'] = $categoriaFiltrada;
+}
+
+if (!empty($filtroPrecioMin)) {
+    $where[] = "p.precio >= :precio_min";
+    $params[':precio_min'] = $filtroPrecioMin;
+}
+if (!empty($filtroPrecioMax)) {
+    $where[] = "p.precio <= :precio_max";
+    $params[':precio_max'] = $filtroPrecioMax;
 }
 
 
@@ -142,12 +157,20 @@ $productos = $stmt->fetchAll();
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="mb-3 rango">
-                            <input class="form-control" type="number" id="precio-min" name="precio-min" min="0"
-                                max="1000" value="100" placeholder="0">
-                            <p>-</p>
-                            <input class="form-control" type="number" id="precio-max" name="precio-max" min="0"
-                                max="1000" value="500" placeholder="100">
+                        <div class="mb-3">
+                            <ul class="list-inline">
+                                <li class="list-inline-item">
+                                    <input name="precio_min" class="form-control" type="number" id="precio-min" name="precio-min" min="0"
+                                        max="<?= htmlspecialchars($precioAlto['precio']) ?>" placeholder="0">
+                                </li>
+                                <li class="list-inline-item">
+                                    <p>-</p>
+                                </li>
+                                <li class="list-inline-item ">
+                                    <input name="precio_max" class="form-control" type="number" id="precio-max" name="precio-max" min="0"
+                                        max="<?= htmlspecialchars($precioAlto['precio']) ?>"  placeholder="<?= htmlspecialchars($precioAlto['precio']) ?>">
+                                </li>
+                            </ul>
                         </div>
                         <div class="mb-2 d-grid">
                             <button type="submit" class="btn btn-primary">Buscar</button>
@@ -157,46 +180,46 @@ $productos = $stmt->fetchAll();
                         </div>
                     </form>
                 </div>
-            </div>
-        </div>
 
-        <!-- Inicio Carga de Productos -->
 
-        <div class="col-md-9">
+                <!-- Inicio Carga de Productos -->
 
-            <div class="row">
-                <?php foreach ($productos as $producto): ?>
-                    <div class="col mb-4">
-                        <div class="card cardprod">
-                            <div class="flexbox card-head">
-                                <img src="../<?= $producto['imagen']; ?>" class="card-img-top-prod"
-                                    alt="<?php echo htmlspecialchars($producto['nombre']); ?>">
-                            </div>
-                            <div class="card-body">
-                                <h5 class="card-title"><?php echo htmlspecialchars($producto['nombre']); ?></h5>
-                                <p class="card-text"><?php echo htmlspecialchars($producto['descripcion']); ?></p>
-                                <div class="row">
-                                    <div class="d-grid col-9">
-                                        <a href="Producto.php?id=<?= $producto['producto_id'] ?>"
-                                            class="btn btn-warning"><?= $producto['precio'] ?></a>
+                <div class="col-md-9">
+
+                    <div class="row">
+                        <?php foreach ($productos as $producto): ?>
+                            <div class="col-md-4 mb-4">
+                                <div class="card">
+                                    <div class="flexbox card-head">
+                                        <img src="../<?= $producto['imagen']; ?>" class="card-img-top-prod"
+                                            alt="<?php echo htmlspecialchars($producto['nombre']); ?>">
                                     </div>
-                                    <div class="d-grid col-2">
-                                        <button class="btn btn-primary" onclick="addProducto(<?= $producto['producto_id'] ?>)"><i
-                                                class="fa-solid fa-cart-plus"></i></button>
+                                    <div class="card-body">
+                                        <h5 class="card-title"><?php echo htmlspecialchars($producto['nombre']); ?></h5>
+                                        <p class="card-text"><?php echo htmlspecialchars($producto['descripcion']); ?></p>
+                                        <div class="row">
+                                            <div class="d-grid col-9">
+                                                <a href="Producto.php?id=<?= $producto['producto_id'] ?>"
+                                                    class="btn btn-warning"><?= $producto['precio'] ?></a>
+                                            </div>
+                                            <div class="d-grid col-2">
+                                                <button class="btn btn-primary"
+                                                    onclick="addProducto(<?= $producto['producto_id'] ?>)"><i
+                                                        class="fa-solid fa-cart-plus"></i></button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        <?php endforeach; ?>
+                        <?php if (empty($productos)): ?>
+                            <p>No hay productos que coincidan con los filtros.</p>
+                        <?php endif; ?>
                     </div>
-                <?php endforeach; ?>
-                <?php if (empty($productos)): ?>
-                    <p>No hay productos que coincidan con los filtros.</p>
-                <?php endif; ?>
+
+                </div>
             </div>
-
-
         </div>
-
     </div>
 
 
