@@ -19,15 +19,6 @@ if ($id == '') {
 
     if ($resultado > 0) {
 
-        $sqlstock = "SELECT cantidad as cantidad FROM stock WHERE producto_id=?";
-
-        $stmtstock = $pdo->prepare($sqlstock);
-        $stmtstock->execute([$id]);
-        $StockDisponible = $stmtstock->fetch(PDO::FETCH_ASSOC);
-
-        
-
-
         $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, pr.descripcion as descripcion, cat.nombre as categoria, cat.categoria_id as catid
                               From producto pr INNER JOIN categoria cat 
                               ON cat.categoria_id = pr.categoria_id
@@ -57,7 +48,6 @@ if ($id == '') {
         echo 'Error al cargar el producto';
         exit;
     }
-    print_r($StockDisponible);
 }
 
 
@@ -110,23 +100,27 @@ if ($id == '') {
 <header>
 
     <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+        <div class="container d-flex justify-content-between align-items-center">
+
             <a href="Inicio_Principal.php" class="navbar-brand">
                 <strong>Tienda Electronica</strong>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarHeader"
-                aria-controls="navbarHeader" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+            <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
+                style="max-width: 600px;">
+                <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
+                <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+            </form>
 
-            <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;" id="navbarHeader">
-
+            <div class="d-flex gap-2">
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
-                    <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
-                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
-
+                    <i class="fa-solid fa-cart-shopping"></i> Carrito
+                    <span id="num_cart"
+                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                        <?php echo $num_cart; ?>
+                    </span>
+                </a>
             </div>
 
 
@@ -183,22 +177,17 @@ if ($id == '') {
                             <div class="row">
 
                                 <div class="col-auto">
-                                    <ul class="list-inline pb-4">
+                                    <ul class="list-inline pb-3">
                                         <li class="list-inline-item text-right">
                                             Cantidad
                                             <input type="hidden" name="product-quanity" id="product-quanity" value="1">
                                         </li>
-                                        <li class="list-inline-item menos"><span class="btn btn-success" id="btn-minus"
+                                        <li class="list-inline-item"><span class="btn btn-success" id="btn-minus"
                                                 onclick="menos()">-</span></li>
                                         <li class="list-inline-item"><span type="number" class="badge bg-secondary"
                                                 id="cantidadprod"><?php echo $cantidadinit; ?></span></li>
-                                        <li class="list-inline-item mas"><span class="btn btn-success" id="btn-plus"
+                                        <li class="list-inline-item"><span class="btn btn-success" id="btn-plus"
                                                 onclick="mas()">+</span></li>
-                                        <li class="list-inline-item mas">
-                                            <?php if ($StockDisponible['cantidad'] != null && $StockDisponible['cantidad'] <= 30): ?>
-                                                <span class="badge bg-danger ms-2">¡Quedan solo <?= $StockDisponible['cantidad'] ?> unidades disponibles!</span>
-                                            <?php endif; ?>
-                                        </li>
                                     </ul>
                                 </div>
                             </div>
@@ -250,7 +239,7 @@ if ($id == '') {
                                                         <p class=" my-4"><?= $rowSIM['descripcion'] ?></p>
                                                         <div class="row">
                                                             <div class="d-grid col-9"><a
-                                                                    href="Producto.php?id=<?= $rowSIM['id'] ?>"
+                                                                    href="Producto.php?id=<?= $row['id'] ?>"
                                                                     class="btn btn-warning"><?= $rowSIM['precio'] ?></a>
                                                             </div>
                                                             <div class="d-grid col-2">
