@@ -34,7 +34,41 @@ if ($usuarioActual) {
     $personaId = $usuarioActual['persona_id'];
 }
 
-print_r($personaId);
+// Obtener todos los estados posibles para el filtro
+$estados = $pdo->query("SELECT nombre FROM estado ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN);
+
+// Lógica de filtrado de pedidos
+$filtroCompraId = $_GET['compra_id'] ?? '';
+$filtroFechaInicio = $_GET['fecha_inicio'] ?? '';
+$filtroFechaFin = $_GET['fecha_fin'] ?? '';
+$filtroEstado = $_GET['estado'] ?? '';
+
+$where = [];
+$params = [];
+
+$where[] = "CAST(per.persona_id AS TEXT) ILIKE :persona_id";
+$params[':persona_id'] = "%$personaId%";
+
+if (!empty($filtroCompraId)) {
+    // Usar CAST para asegurar que la comparación sea con texto si pedido_id es numérico en la DB
+    $where[] = "CAST(c.compra_id AS TEXT) ILIKE :compra_id";
+    $params[':compra_id'] = "%$filtroCompraId%";
+}
+if (!empty($filtroFechaInicio)) {
+    $where[] = "c.fecha_compra >= :fecha_inicio";
+    $params[':fecha_inicio'] = $filtroFechaInicio;
+}
+if (!empty($filtroFechaFin)) {
+    $where[] = "c.fecha_compra <= :fecha_fin";
+    $params[':fecha_fin'] = $filtroFechaFin;
+}
+if (!empty($filtroEstado)) {
+    $where[] = "e.nombre ILIKE :estado";
+    $params[':estado'] = "$filtroEstado";
+}
+
+$whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
+
 
 if ($personaId) {
     $sqlCompras = "SELECT c.compra_id,c.fecha_compra,e.nombre as estado, 
@@ -59,11 +93,11 @@ if ($personaId) {
                    JOIN producto pr ON dc.producto_id = pr.producto_id
                    LEFT JOIN usuario_cliente uc ON c.usuario_cliente_id = uc.usuario_cliente_id
                    LEFT JOIN persona per ON uc.persona_id = per.persona_id
-                   WHERE per.persona_id = :persona_id
+                   $whereClause 
                    GROUP BY c.compra_id, c.fecha_compra, per.nombre, per.apellido_paterno, e.nombre
                    ORDER BY c.compra_id DESC";
     $stmtCompras = $pdo->prepare($sqlCompras);
-    $stmtCompras->execute([':persona_id' => $personaId]);
+    $stmtCompras->execute($params);
     $ComprasUsuario = $stmtCompras->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -190,6 +224,41 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
 
                 <div class="col-md-8 content">
 
+                    <form class="row g-2 mb-3" method="GET">
+                        <div class="col-md-2">
+                            <input type="text" name="compra_id" value="<?= htmlspecialchars($filtroCompraId) ?>"
+                                class="form-control" placeholder="Número de Compra">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="fecha_inicio" class="form-label visually-hidden">Fecha Inicio</label>
+                            <input type="date" name="fecha_inicio" id="fecha_inicio"
+                                value="<?= htmlspecialchars($filtroFechaInicio) ?>" class="form-control"
+                                title="Fecha de inicio">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="fecha_fin" class="form-label visually-hidden">Fecha Fin</label>
+                            <input type="date" name="fecha_fin" id="fecha_fin"
+                                value="<?= htmlspecialchars($filtroFechaFin) ?>" class="form-control"
+                                title="Fecha de fin">
+                        </div>
+                        <div class="col-md-2">
+                            <select name="estado" class="form-select">
+                                <option value="">Todos los Estados</option>
+                                <?php foreach ($estados as $estado): ?>
+                                    <option value="<?= htmlspecialchars($estado) ?>" <?= $filtroEstado === $estado ? 'selected' : '' ?>>
+                                        <?= ucfirst($estado) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-primary w-100">Buscar</button>
+                        </div>
+                        <div class="col-md-1">
+                            <a href="UserRegistroPedido.php" class="btn btn-secondary w-100">Limpiar</a>
+                        </div>
+                    </form>
+
                     <div class="text-center">
 
                         <?php if (count($ComprasUsuario) > 0): ?>
@@ -204,7 +273,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                                         <span># <?= htmlspecialchars($row['compra_id']) ?></span>
                                     </div>
 
-                                    <div class="card-body" >
+                                    <div class="card-body">
                                         <div class="row">
                                             <div class="col-2">
                                                 <h6 class="card-title fw-bold">Estado: <?= htmlspecialchars($row['estado']) ?>
