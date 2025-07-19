@@ -14,6 +14,7 @@ $precio = '';
 $marca = '';
 $descontinuado = false; // Valor por defecto para el checkbox
 $categoria_id = '';
+$proveedor_id = ''; // <--- NUEVO: Inicializar variable para el proveedor
 $rutaimagen = '';
 
 // Obtener todas las categorías para el dropdown
@@ -22,11 +23,20 @@ try {
     $stmtCategorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
     $categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    // Si hay un error al cargar categorías, registra el error y notifica.
     error_log("Error al cargar categorías en nuevo_producto.php: " . $e->getMessage());
     $_SESSION['modal_message'] = "Error interno: No se pudieron cargar las categorías.";
     $_SESSION['modal_type'] = "danger";
-    // Podrías redirigir o simplemente mostrar el error en esta página
+}
+
+// <--- NUEVO: Obtener todos los proveedores para el dropdown
+$proveedores = [];
+try {
+    $stmtProveedores = $pdo->query("SELECT proveedor_id, nombre_empresa FROM proveedor ORDER BY nombre_empresa");
+    $proveedores = $stmtProveedores->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar proveedores en nuevo_producto.php: " . $e->getMessage());
+    $_SESSION['modal_message'] = "Error interno: No se pudieron cargar los proveedores.";
+    $_SESSION['modal_type'] = "danger";
 }
 
 // Variable para errores de validación en este formulario
@@ -41,11 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $descontinuado = isset($_POST['descontinuado']) ? 1 : 0; // Convertimos a 1 si marcado, 0 si no.
 
     $categoria_id = filter_var($_POST['categoria_id'] ?? '', FILTER_VALIDATE_INT);
+    $proveedor_id = filter_var($_POST['proveedor_id'] ?? '', FILTER_VALIDATE_INT); // <--- NUEVO: Obtener ID del proveedor
 
     // Stock inicial se establecerá a 0 por defecto al insertar
     $stock_inicial_default = 0;
     
     $directorio = 'ecommerce/imgs/'; // Asegúrate de que esta ruta sea correcta y accesible para escritura
+    // Asegúrate de que el directorio exista y tenga permisos de escritura (0755 o 0777 temporalmente para prueba)
+    if (!is_dir($directorio)) {
+        mkdir($directorio, 0755, true); // Crea el directorio recursivamente si no existe
+    }
+
     $nombreArchivoImagen = ''; // Para almacenar el nombre del archivo final
     $target_file = ''; // Ruta completa del archivo en el servidor
 
@@ -61,14 +77,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if($check === false) {
             $formError = "El archivo no es una imagen válida.";
         } elseif ($_FILES['imagen']['size'] > 500000) { // Limitar a 500KB
-            $formError = "Lo sentimos, tu archivo es demasiado grande.";
-        } elseif (!in_array($ext, ['png', 'jpg', 'jpeg', 'gif'])) { // Tipos de archivo permitidos
+            $formError = "Lo sentimos, tu archivo es demasiado grande (máx. 500KB).";
+        } elseif (!in_array(strtolower($ext), ['png', 'jpg', 'jpeg', 'gif'])) { // Tipos de archivo permitidos, case-insensitive
             $formError = "Solo se permiten archivos JPG, JPEG, PNG y GIF.";
         }
     } else {
         $formError = "Debe seleccionar una imagen para el producto.";
+        // Si el error es UPLOAD_ERR_NO_FILE (4), puede ser el caso más común si no se selecciona.
+        if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_NO_FILE) {
+             $formError = "Debe seleccionar una imagen para el producto.";
+        } else if (isset($_FILES['imagen'])) {
+            $formError = "Error al subir la imagen: " . $_FILES['imagen']['error'] . ". Intente de nuevo.";
+        }
     }
-
 
     // Validaciones del formulario
     if (empty($nombre)) {
@@ -77,17 +98,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formError = "El precio debe ser un número válido y no negativo.";
     } elseif ($categoria_id === false || $categoria_id <= 0) {
         $formError = "Debe seleccionar una categoría válida.";
+    } elseif ($proveedor_id === false || $proveedor_id <= 0) { // <--- NUEVA VALIDACIÓN PARA EL PROVEEDOR
+        $formError = "Debe seleccionar un proveedor válido.";
     }
+
 
     // Si no hay errores en el formulario ni en la carga de imagen
     if (empty($formError)) {
+        // <--- INICIO DE TRANSACCIÓN
+        $pdo->beginTransaction();
         try {
             // Mover el archivo subido a la ubicación final
             if (!move_uploaded_file($_FILES["imagen"]["tmp_name"], $target_file)) {
                 $formError = "Error al subir la imagen. Verifique los permisos de la carpeta 'ecommerce/imgs/'.";
+                $pdo->rollBack(); // Deshacer si la imagen no se puede mover
             } else {
                 // Insertar el producto en la base de datos
-                $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id, ruta_imagen) VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id, :ruta_imagen)");
+                $stmt = $pdo->prepare("INSERT INTO producto (nombre, descripcion, precio, unidad_stock, marca, descontinuado, categoria_id, ruta_imagen)
+                                       VALUES (:nombre, :descripcion, :precio, :unidad_stock, :marca, :descontinuado, :categoria_id, :ruta_imagen)
+                                       RETURNING producto_id"); // <-- IMPORTANTE: RETURNING para obtener el ID
                 $stmt->execute([
                     ':nombre' => $nombre,
                     ':descripcion' => $descripcion,
@@ -98,7 +127,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':categoria_id' => $categoria_id,
                     ':ruta_imagen' => $rutaimagen // La ruta relativa que se guardará
                 ]);
+                $new_producto_id = $stmt->fetchColumn(); // Obtener el ID del producto recién insertado
 
+                // <--- NUEVO: Insertar la relación en la tabla 'proveedor_producto'
+                $stmtProveedorProducto = $pdo->prepare("INSERT INTO proveedor_producto (proveedor_id, producto_id) VALUES (:proveedor_id, :producto_id)");
+                $stmtProveedorProducto->execute([
+                    ':proveedor_id' => $proveedor_id,
+                    ':producto_id' => $new_producto_id
+                ]);
+
+                $pdo->commit(); // Confirmar la transacción si todo fue exitoso
                 // Establecer mensaje de éxito en la sesión y redirigir
                 $_SESSION['modal_message'] = "Producto registrado con éxito.";
                 $_SESSION['modal_type'] = "success";
@@ -106,9 +144,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
             }
         } catch (PDOException $e) {
-            // Capturar errores de la base de datos
-            error_log("Error al guardar el producto en DB: " . $e->getMessage()); // Para depuración
-            $formError = "Error de base de datos al registrar el producto."; // Mensaje amigable para el usuario
+            $pdo->rollBack(); // Deshacer toda la transacción si algo falla
+            // Si la imagen ya se movió y la DB falló, podrías intentar borrar la imagen aquí para limpieza
+            if (!empty($target_file) && file_exists($target_file)) {
+                unlink($target_file); // Eliminar la imagen si la inserción en DB falla
+            }
+            error_log("Error al guardar el producto o proveedor_producto en DB: " . $e->getMessage()); // Para depuración
+            $formError = "Error de base de datos al registrar el producto y su proveedor."; // Mensaje amigable para el usuario
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            if (!empty($target_file) && file_exists($target_file)) {
+                unlink($target_file);
+            }
+            error_log("Error inesperado: " . $e->getMessage());
+            $formError = "Ocurrió un error inesperado al registrar el producto.";
         }
     }
 }
@@ -199,6 +248,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endforeach; ?>
             </select>
         </div>
+        <div class="mb-3">
+            <label for="proveedor_id" class="form-label">Proveedor Principal</label>
+            <select name="proveedor_id" id="proveedor_id" class="form-select" required>
+                <option value="" disabled selected>Seleccione un proveedor</option>
+                <?php foreach ($proveedores as $prov): ?>
+                    <option value="<?= htmlspecialchars($prov['proveedor_id']) ?>" <?= ($proveedor_id == $prov['proveedor_id']) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($prov['nombre_empresa']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" name="descontinuado" id="descontinuado" <?= $descontinuado ? 'checked' : '' ?>>
             <label class="form-check-label" for="descontinuado">
@@ -227,4 +287,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 </script>
 </body>
-</html>
+</html> 
