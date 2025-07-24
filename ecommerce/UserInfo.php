@@ -44,16 +44,10 @@ if ($personaId) {
 $mensaje = '';
 $claseMensaje = '';
 
-// Lógica para actualizar todo el perfil
+// Lógica para actualizar Direccion y Telefono
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
-    $nombre = trim($_POST['nombre'] ?? '');
-    $apellido_paterno = trim($_POST['apellido_paterno'] ?? '');
-    $apellido_materno = trim($_POST['apellido_materno'] ?? '');
-    $email = trim($_POST['email'] ?? '');
     $direccion = trim($_POST['direccion'] ?? '');
     $telefono = trim($_POST['telefono'] ?? '');
-    $fecha_nacimiento = trim($_POST['fecha_nacimiento'] ?? '');
-    $sexo = trim($_POST['sexo'] ?? '');
 
     // Validaciones básicas (puedes añadir más si es necesario)
     if (empty($nombre) || empty($apellido_paterno) || empty($email)) {
@@ -65,14 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     } else {
         try {
             $sqlUpdate = "UPDATE persona SET
-                          nombre = :nombre,
-                          apellido_paterno = :apellido_paterno,
-                          apellido_materno = :apellido_materno,
                           email = :email,
                           direccion = :direccion,
                           telefono = :telefono,
-                          fecha_nacimiento = :fecha_nacimiento,
-                          sexo = :sexo
                           WHERE persona_id = :persona_id";
 
             $stmtUpdate = $pdo->prepare($sqlUpdate);
@@ -346,6 +335,11 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                             <div class="card card-user-info">
                                 <div class="card-header bg-light fw-bold">
                                     <h4 class="card-title fw-bold">Datos Personales</h4>
+
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                        data-bs-target="#editDatosModal">
+                                        <i class="fa fa-edit"></i> Editar
+                                    </button>
                                 </div>
 
                                 <?php if ($mensaje): ?>
@@ -436,7 +430,38 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
 
     </div>
 
-
+    <!-- Modal para editar Dirección y Teléfono -->
+    <div class="modal fade" id="editDatosModal" tabindex="-1" aria-labelledby="editDatosModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editDatosModalLabel">Editar Datos Personales</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Campos para editar dirección y teléfono -->
+                        <div class="mb-3">
+                            <label for="direccion" class="form-label">Dirección</label>
+                            <input type="text" class="form-control" id="direccion" name="direccion"
+                                value="<?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?>" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="telefono" name="telefono"
+                                value="<?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?>" required>
+                        </div>
+                        <!-- Agrega un campo oculto para indicar la acción -->
+                        <input type="hidden" name="update_datos" value="1">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
 
     <!-- Start Footer -->

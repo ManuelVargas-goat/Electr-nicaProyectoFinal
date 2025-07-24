@@ -11,11 +11,18 @@ if ($id == '') {
 
 } else {
 
+    $sqlstock = "SELECT cantidad as cantidad FROM stock WHERE producto_id=?";
+
+    $stmtstock = $pdo->prepare($sqlstock);
+    $stmtstock->execute([$id]);
+    $StockDisponible = $stmtstock->fetch(PDO::FETCH_ASSOC);
+
+
     $sql = "SELECT count(producto_id) FROM producto WHERE producto_id=?";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
-    $resultado = $stmt->fetchAll();
+    $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if ($resultado > 0) {
 
@@ -150,7 +157,17 @@ if ($id == '') {
                 <div class="col-lg-7 mt-5">
                     <div class="card">
                         <div class="card-body">
-                            <h1 class="h2"><?= $nombre; ?></h1>
+                            <ul class="list-inline">
+                                <li class="list-inline-item">
+                                    <h1 class="h2"><?= $nombre; ?></h1>
+                                </li>
+                                <li class="list-inline-item">
+                                    <?php if ($StockDisponible['cantidad'] == 0): ?>
+                                        <span class="badge bg-danger ms-2"> PRODUCTO AGOTADO</span>
+                                    <?php endif; ?>
+                                </li>
+                            </ul>
+
                             <p class="h3 py-2">S/. <?= $precio; ?></p>
                             <ul class="list-inline">
                                 <li class="list-inline-item">
@@ -174,6 +191,7 @@ if ($id == '') {
                                 <li>Dolore magna aliqua</li>
                                 <li>Excepteur sint</li>
                             </ul>
+                            <span id="StockDisponible" type="number"  style="display: none;"><?= $StockDisponible['cantidad']; ?></span>
                             <div class="row">
 
                                 <div class="col-auto">
@@ -188,23 +206,31 @@ if ($id == '') {
                                                 id="cantidadprod"><?php echo $cantidadinit; ?></span></li>
                                         <li class="list-inline-item"><span class="btn btn-success" id="btn-plus"
                                                 onclick="mas()">+</span></li>
+                                        <li class="list-inline-item mas">
+                                            <?php if ($StockDisponible['cantidad'] != null && $StockDisponible['cantidad'] != 0 && $StockDisponible['cantidad'] <= 30): ?>
+                                                <span class="badge bg-danger ms-2">¡Quedan solo
+                                                    <?= $StockDisponible['cantidad'] ?> unidades disponibles!</span>
+                                            <?php endif; ?>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
 
+                            <?php if ($StockDisponible['cantidad'] != 0): ?>
 
-                            <div class="row pb-3">
-                                <div class="col d-grid">
-                                    <a type="submit" href="carrocompras.php" class="btn btn-success btn-lg"
-                                        onclick="addProducto(<?= $id; ?>)" name="submit" value="buy">Comprar</a>
-                                </div>
-                                <div class="col d-grid">
-                                    <button type="submit" class="btn btn-success btn-lg"
-                                        onclick="addProducto(<?= $id; ?>)" name="submit" value="addtocard">Añadir al
-                                        Carro</button>
-                                </div>
-                            </div>
 
+                                <div class="row pb-3">
+                                    <div class="col d-grid">
+                                        <a type="submit" href="carrocompras.php" class="btn btn-success btn-lg"
+                                            onclick="addProducto(<?= $id; ?>)" name="submit" value="buy">Comprar</a>
+                                    </div>
+                                    <div class="col d-grid">
+                                        <button type="submit" class="btn btn-success btn-lg"
+                                            onclick="addProducto(<?= $id; ?>)" name="submit" value="addtocard">Añadir al
+                                            Carro</button>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
 
                         </div>
                     </div>
@@ -239,7 +265,7 @@ if ($id == '') {
                                                         <p class=" my-4"><?= $rowSIM['descripcion'] ?></p>
                                                         <div class="row">
                                                             <div class="d-grid col-9"><a
-                                                                    href="Producto.php?id=<?= $row['id'] ?>"
+                                                                    href="Producto.php?id=<?= $rowSIM['id'] ?>"
                                                                     class="btn btn-warning"><?= $rowSIM['precio'] ?></a>
                                                             </div>
                                                             <div class="d-grid col-2">
@@ -279,22 +305,26 @@ if ($id == '') {
     <!-- Script Contador de Productos en Carrito -->
     <script>
 
+        let StockDisponible = parseInt(document.getElementById("StockDisponible").innerHTML)
 
         function mas() {
-            let elementoContador = document.getElementById("cantidadprod").innerHTML
-            if (elementoContador < 20) {
+            
+            let elementoContador = parseInt(document.getElementById("cantidadprod").innerHTML)
+            
+            if (elementoContador < StockDisponible) {
                 elementoContador++
                 document.getElementById('cantidadprod').innerHTML = elementoContador
             }
         }
 
         function menos() {
-            let elementoContador = document.getElementById("cantidadprod").innerHTML
+            let elementoContador = parseInt(document.getElementById("cantidadprod").innerHTML)
             if (elementoContador > 1) {
                 elementoContador--
                 document.getElementById('cantidadprod').innerHTML = elementoContador
             }
         }
+
         function addProducto(id) {
             let url = "comprasact.php"
             let cantidad = document.getElementById("cantidadprod").textContent;

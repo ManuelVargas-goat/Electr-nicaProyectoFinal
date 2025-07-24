@@ -7,7 +7,17 @@ $sql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcio
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute();
-$resultado = $stmt->fetchAll();
+$resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+$PERsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, pr.ruta_imagen as imagen
+                       From producto pr 
+                       WHERE pr.categoria_id= 1";
+
+$PERstmt = $pdo->prepare($PERsql);
+$PERstmt->execute();
+$resultadoPER = $PERstmt->fetchAll(PDO::FETCH_ASSOC);
+
 ?>
 
 
@@ -96,14 +106,14 @@ $resultado = $stmt->fetchAll();
 
         <!-- Inicio Carousel de Productos Selecionados -->
         <div class="divcontent">
-            <div id="carousel" class="carousel slide" data-bs-ride="carousel">
+            <div id="ProductosSeleccionadosCarousel" class="carousel slide" data-bs-ride="carousel">
 
                 <div class="carousel-inner">
                     <div class="carousel-item active">
                         <div class="container">
                             <div class="row p-5">
-                                <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
-                                    <img class="img-fluid" src="imgs/AlcatelPiolus.png" alt="">
+                                <div class="flexbox cardhead_carouselprod mx-auto col-md-8 col-lg-6 order-lg-last">
+                                    <img class="img-fluid" src="imgs/Cactus.png" alt="">
                                 </div>
                                 <div class="col-lg-6 mb-0 d-flex align-items-center">
                                     <div class="text-align-left align-self-center">
@@ -121,7 +131,7 @@ $resultado = $stmt->fetchAll();
                     <div class="carousel-item">
                         <div class="container">
                             <div class="row p-5">
-                                <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
+                                <div class="flexbox cardhead_carouselprod mx-auto col-md-8 col-lg-6 order-lg-last">
                                     <img class="img-fluid" src="imgs/AcerMaximus.png" alt="">
                                 </div>
                                 <div class="col-lg-6 mb-0 d-flex align-items-center">
@@ -141,7 +151,7 @@ $resultado = $stmt->fetchAll();
                     <div class="carousel-item">
                         <div class="container">
                             <div class="row p-5">
-                                <div class="mx-auto col-md-8 col-lg-6 order-lg-last">
+                                <div class="flexbox cardhead_carouselprod mx-auto col-md-8 col-lg-6 order-lg-last">
                                     <img class="img-fluid" src="imgs/Moto G Movil.png" alt="">
                                 </div>
                                 <div class="col-lg-6 mb-0 d-flex align-items-center">
@@ -159,11 +169,14 @@ $resultado = $stmt->fetchAll();
                         </div>
                     </div>
                 </div>
-                <button class="carousel-control-prev" type="button" data-bs-slide="prev">
+                <!-- Controles del carousel de Productos Seleccionados -->
+                <button class="carousel-control-prev" type="button" data-bs-target="#ProductosSeleccionadosCarousel"
+                 data-bs-slide="prev">
                     <span class="carousel-control-prev-icon" aria-hidden="true"></span>
                     <span class="visually-hidden">Previous</span>
                 </button>
-                <button class="carousel-control-next" type="button" data-bs-slide="next">
+                <button class="carousel-control-next" type="button" data-bs-target="#ProductosSeleccionadosCarousel"
+                 data-bs-slide="next">
                     <span class="carousel-control-next-icon" aria-hidden="true"></span>
                     <span class="visually-hidden">Next</span>
                 </button>
@@ -171,7 +184,7 @@ $resultado = $stmt->fetchAll();
 
             <!-- Fin Carousel de Productos Selecionados -->
 
-            <!-- Inicio Productos selecionados en general -->
+            <!-- Inicio Productos en General -->
             <section class="carouselprods bg-light">
                 <div class="container py-5">
                     <div class="row text-center py-3">
@@ -232,7 +245,85 @@ $resultado = $stmt->fetchAll();
                             <?php endfor; ?>
 
                         </div>
-                        <!-- Controles del carousel -->
+                        <!-- Controles de Productos en General -->
+                        <button class="carousel-control-prev" type="button" data-bs-target="#productosCarousel"
+                            data-bs-slide="prev">
+                            <span class="izquierda_arrow"><i class="fas fa-arrow-left" aria-hidden="true"></i></span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#productosCarousel"
+                            data-bs-slide="next">
+                            <span class="derecha_arrow"><i class="fas fa-arrow-right" aria-hidden="true"></i></span>
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </section>
+            <!-- Fin Productos selecionados en general -->
+
+            <!-- Inicio Productos en General -->
+            <section class="carouselprods bg-light">
+                <div class="container py-5">
+                    <div class="row text-center py-3">
+                        <div class="col-lg-6 m-auto">
+                            <h1 class="h1"> Periféricos</h1>
+                            <p>
+                               ¡Los mejores accesorios para tu computadora!
+                            </p>
+                        </div>
+                    </div>
+
+                    <div id="productosCarousel" class="carousel slide" data-interval="carousel">
+                        <div class="carousel-inner">
+
+                            <?php
+                            $totalProductos = count($resultadoPER);
+                            $productosPorSlide = 4;
+                            for ($i = 0; $i < $totalProductos; $i += $productosPorSlide):
+                                $active = ($i === 0) ? 'active' : '';
+                                ?>
+                                <div class="carousel-item <?php echo $active; ?>">
+                                    <div class="container-fluid bg-trasparent my-4 p-3">
+                                        <div class="row row-cols-1 row-cols-xs-2 row-cols-sm-2 row-cols-lg-4 g-3">
+                                            <?php
+                                            // Mostrar 4 productos por slide
+                                            for ($j = $i; $j < $i + $productosPorSlide && $j < $totalProductos; $j++):
+                                                $row = $resultadoPER[$j];
+                                                ?>
+                                                <div class="col">
+                                                    <div class="card cardprod shadow-sm"> 
+                                                        <div class="flexbox card-head">
+                                                            <img src="../<?= $row['imagen']; ?>"
+                                                            class="card-img-top-prod" alt="...">
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="h2 card-title text-center">
+                                                                <span class="float-center price-hp"><?= $row['nombre'] ?></span>
+                                                            </div>
+                                                            <p class="my-4"><?= $row['descripcion'] ?></p>
+                                                            <div class="row">
+                                                                <div class="d-grid col-9">
+                                                                    <a href="Producto.php?id=<?= $row['id'] ?>"
+                                                                        class="btn btn-warning"><?= $row['precio'] ?></a>
+                                                                </div>
+                                                                <div class="d-grid col-2">
+                                                                    <button class="btn btn-primary"
+                                                                        onclick="addProducto(<?= $row['id'] ?>)"><i
+                                                                            class="fa-solid fa-cart-plus"></i></button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endfor; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endfor; ?>
+
+                        </div>
+                        <!-- Controles de Productos en General -->
                         <button class="carousel-control-prev" type="button" data-bs-target="#productosCarousel"
                             data-bs-slide="prev">
                             <span class="izquierda_arrow"><i class="fas fa-arrow-left" aria-hidden="true"></i></span>

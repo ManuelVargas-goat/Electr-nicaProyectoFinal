@@ -1,0 +1,15 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: #EAEDED;
+  font-family: 'Segoe UI', sans-serif;
+  color: #111;
+}
+
+#footer {
+  margin-top: auto;
+}
