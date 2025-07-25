@@ -9,14 +9,7 @@ if ($id == '') {
     echo 'Error al CARGAR el producto';
     exit;
 
-} else {
-
-    $sqlstock = "SELECT cantidad as cantidad FROM stock WHERE producto_id=?";
-
-    $stmtstock = $pdo->prepare($sqlstock);
-    $stmtstock->execute([$id]);
-    $StockDisponible = $stmtstock->fetch(PDO::FETCH_ASSOC);
-
+} {
 
     $sql = "SELECT count(producto_id) FROM producto WHERE producto_id=?";
 
@@ -26,10 +19,12 @@ if ($id == '') {
 
     if ($resultado > 0) {
 
-        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, pr.descripcion as descripcion, cat.nombre as categoria, cat.categoria_id as catid
+        $sql = $pdo->prepare("SELECT pr.producto_id as id,pr.nombre as nombre,pr.precio as precio, pr.marca as marca, 
+                              pr.descripcion as descripcion, cat.nombre as categoria, cat.categoria_id as catid, st.cantidad as stock
                               From producto pr INNER JOIN categoria cat 
-                              ON cat.categoria_id = pr.categoria_id
-                              WHERE producto_id=? LIMIT 1");
+                              ON cat.categoria_id = pr.categoria_id INNER JOIN stock st
+					          ON st.producto_id = pr.producto_id 
+                              WHERE pr.producto_id=? LIMIT 1");
         $sql->execute([$id]);
         $row = $sql->fetch(PDO::FETCH_ASSOC);
         $id = $row['id'];
@@ -38,13 +33,15 @@ if ($id == '') {
         $marca = $row['marca'];
         $precio = $row['precio'];
         $catid = $row['catid'];
+        $stock = $row['stock'];
 
 
-        $SIMsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen
+        $SIMsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen, st.cantidad as stock
                        From producto pr INNER JOIN categoria cat 
-                       ON cat.categoria_id = pr.categoria_id
+                       ON cat.categoria_id = pr.categoria_id INNER JOIN stock st
+					   ON st.producto_id = pr.producto_id 
                        WHERE pr.categoria_id= :catid
-                       AND producto_id <> :personaid ";
+                       AND pr.producto_id <> :personaid ";
 
         $stmt = $pdo->prepare($SIMsql);
         $stmt->execute([':catid' => $catid, ':personaid' => $id]);
@@ -162,7 +159,7 @@ if ($id == '') {
                                     <h1 class="h2"><?= $nombre; ?></h1>
                                 </li>
                                 <li class="list-inline-item">
-                                    <?php if ($StockDisponible['cantidad'] == 0): ?>
+                                    <?php if ($stock == 0): ?>
                                         <span class="badge bg-danger ms-2"> PRODUCTO AGOTADO</span>
                                     <?php endif; ?>
                                 </li>
@@ -191,7 +188,8 @@ if ($id == '') {
                                 <li>Dolore magna aliqua</li>
                                 <li>Excepteur sint</li>
                             </ul>
-                            <span id="StockDisponible" type="number"  style="display: none;"><?= $StockDisponible['cantidad']; ?></span>
+                            <span id="StockDisponible" type="number"
+                                style="display: none;"><?= $stock; ?></span>
                             <div class="row">
 
                                 <div class="col-auto">
@@ -207,16 +205,16 @@ if ($id == '') {
                                         <li class="list-inline-item"><span class="btn btn-success" id="btn-plus"
                                                 onclick="mas()">+</span></li>
                                         <li class="list-inline-item mas">
-                                            <?php if ($StockDisponible['cantidad'] != null && $StockDisponible['cantidad'] != 0 && $StockDisponible['cantidad'] <= 30): ?>
+                                            <?php if ($stock != null && $stock != 0 && $stock <= 30): ?>
                                                 <span class="badge bg-danger ms-2">¡Quedan solo
-                                                    <?= $StockDisponible['cantidad'] ?> unidades disponibles!</span>
+                                                    <?= $stock ?> unidades disponibles!</span>
                                             <?php endif; ?>
                                         </li>
                                     </ul>
                                 </div>
                             </div>
 
-                            <?php if ($StockDisponible['cantidad'] != 0): ?>
+                            <?php if ($stock != 0): ?>
 
 
                                 <div class="row pb-3">
@@ -268,11 +266,20 @@ if ($id == '') {
                                                                     href="Producto.php?id=<?= $rowSIM['id'] ?>"
                                                                     class="btn btn-warning"><?= $rowSIM['precio'] ?></a>
                                                             </div>
-                                                            <div class="d-grid col-2">
-                                                                <buttton class="btn btn-primary"
-                                                                    onclick="addProducto(<?= $rowSIM['id'] ?>)"><i
-                                                                        class="fa-solid fa-cart-plus"></i></button>
-                                                            </div>
+                                                            <?php if ($rowSIM['stock'] != 0) { ?>
+                                                                <div class="d-grid col-2">
+                                                                    <button class="btn btn-primary"
+                                                                        onclick="addProducto(<?= $row['id'] ?>)"><i
+                                                                            class="fa-solid fa-cart-plus"></i></button>
+                                                                </div>
+                                                            <?php } else { ?>
+                                                                <div class="d-grid col-2">
+                                                                    <button class="btn btn-danger"><i
+                                                                            class="fa-solid fa-cart-plus"></i></button>
+                                                                </div>
+                                                            <?php }
+                                                            ; ?>
+
                                                         </div>
                                                     </div>
                                                 </div>
@@ -308,9 +315,9 @@ if ($id == '') {
         let StockDisponible = parseInt(document.getElementById("StockDisponible").innerHTML)
 
         function mas() {
-            
+
             let elementoContador = parseInt(document.getElementById("cantidadprod").innerHTML)
-            
+
             if (elementoContador < StockDisponible) {
                 elementoContador++
                 document.getElementById('cantidadprod').innerHTML = elementoContador

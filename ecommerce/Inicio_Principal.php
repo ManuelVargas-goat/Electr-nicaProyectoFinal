@@ -1,17 +1,19 @@
 <?php
 include("config.php");
 
-$sql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen
+$sql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, cat.nombre as categoria, pr.ruta_imagen as imagen,st.cantidad as stock
        From producto pr INNER JOIN categoria cat 
-       ON cat.categoria_id = pr.categoria_id";
+       ON cat.categoria_id = pr.categoria_id INNER JOIN stock st
+							  ON st.producto_id = pr.producto_id ";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute();
 $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-$PERsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, pr.ruta_imagen as imagen
-                       From producto pr 
+$PERsql = "SELECT pr.producto_id as id,pr.nombre,pr.precio, pr.marca, pr.descripcion, pr.ruta_imagen as imagen, st.cantidad as stock
+                       From producto pr INNER JOIN stock st
+						ON st.producto_id = pr.producto_id 
                        WHERE pr.categoria_id= 1";
 
 $PERstmt = $pdo->prepare($PERsql);
@@ -229,11 +231,19 @@ $resultadoPER = $PERstmt->fetchAll(PDO::FETCH_ASSOC);
                                                                     <a href="Producto.php?id=<?= $row['id'] ?>"
                                                                         class="btn btn-warning"><?= $row['precio'] ?></a>
                                                                 </div>
+
+                                                                <?php if ($row['stock'] != 0){ ?>
                                                                 <div class="d-grid col-2">
                                                                     <button class="btn btn-primary"
                                                                         onclick="addProducto(<?= $row['id'] ?>)"><i
                                                                             class="fa-solid fa-cart-plus"></i></button>
                                                                 </div>
+                                                                <?php } else { ?>
+                                                                <div class="d-grid col-2">
+                                                                    <button class="btn btn-danger"><i
+                                                                            class="fa-solid fa-cart-plus"></i></button>
+                                                                </div>
+                                                                <?php }; ?>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -307,11 +317,18 @@ $resultadoPER = $PERstmt->fetchAll(PDO::FETCH_ASSOC);
                                                                     <a href="Producto.php?id=<?= $row['id'] ?>"
                                                                         class="btn btn-warning"><?= $row['precio'] ?></a>
                                                                 </div>
+                                                                <?php if ($row['stock'] != 0){ ?>
                                                                 <div class="d-grid col-2">
                                                                     <button class="btn btn-primary"
                                                                         onclick="addProducto(<?= $row['id'] ?>)"><i
                                                                             class="fa-solid fa-cart-plus"></i></button>
                                                                 </div>
+                                                                <?php } else { ?>
+                                                                <div class="d-grid col-2">
+                                                                    <button class="btn btn-danger"><i
+                                                                            class="fa-solid fa-cart-plus"></i></button>
+                                                                </div>
+                                                                <?php }; ?>
                                                             </div>
                                                         </div>
                                                     </div>

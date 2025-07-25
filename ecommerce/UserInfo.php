@@ -19,8 +19,6 @@ $stmt->execute([':usuario' => $usuario]);
 
 $usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC);
 
-print_r($usuarioActual);
-
 $nombreUsuario = 'Usuario'; // Valor por defecto
 $personaId = null;
 
@@ -45,47 +43,30 @@ $mensaje = '';
 $claseMensaje = '';
 
 // Lógica para actualizar Direccion y Telefono
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_datos'])) {
     $direccion = trim($_POST['direccion'] ?? '');
     $telefono = trim($_POST['telefono'] ?? '');
 
     // Validaciones básicas (puedes añadir más si es necesario)
-    if (empty($nombre) || empty($apellido_paterno) || empty($email)) {
-        $mensaje = 'Por favor, complete los campos obligatorios (Nombre, Apellido Paterno, Email).';
-        $claseMensaje = 'alert-danger';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $mensaje = 'El formato del email no es válido.';
+    if (empty($direccion) || empty($telefono)) {
+        $mensaje = 'Por favor, complete los campos obligatorios (Direccion y Telefono).';
         $claseMensaje = 'alert-danger';
     } else {
         try {
             $sqlUpdate = "UPDATE persona SET
-                          email = :email,
                           direccion = :direccion,
-                          telefono = :telefono,
+                          telefono = :telefono
                           WHERE persona_id = :persona_id";
 
             $stmtUpdate = $pdo->prepare($sqlUpdate);
-            $stmtUpdate->bindParam(':nombre', $nombre);
-            $stmtUpdate->bindParam(':apellido_paterno', $apellido_paterno);
-            $stmtUpdate->bindParam(':apellido_materno', $apellido_materno);
-            $stmtUpdate->bindParam(':email', $email);
             $stmtUpdate->bindParam(':direccion', $direccion);
             $stmtUpdate->bindParam(':telefono', $telefono);
-            $stmtUpdate->bindParam(':fecha_nacimiento', $fecha_nacimiento);
-            $stmtUpdate->bindParam(':sexo', $sexo);
             $stmtUpdate->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
             if ($stmtUpdate->execute()) {
+                header("Location: Userinfo.php");
                 $mensaje = '¡Perfil actualizado con éxito!';
                 $claseMensaje = 'alert-success';
-                // Volver a cargar los datos del perfil para reflejar los cambios
-                $stmtPerfil = $pdo->prepare($sqlPerfil);
-                $stmtPerfil->execute([':persona_id' => $personaId]);
-                $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
-
-                // Actualizar el nombre del usuario en el sidebar si ha cambiado
-                $nombreUsuario = $perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno'];
-
             } else {
                 $mensaje = 'Error al actualizar el perfil. Inténtelo de nuevo.';
                 $claseMensaje = 'alert-danger';
@@ -132,10 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             $stmtUpdateEmail->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
             if ($stmtUpdateEmail->execute()) {
-
+                header("Location: Userinfo.php");
                 $mensaje = 'Email cambiado con éxito!';
                 $claseMensaje = 'alert-success';
-                header("Refresh: 2");
             } else {
                 $mensaje = 'Error al cambiar el email. Inténtelo de nuevo.';
                 $claseMensaje = 'alert-danger';
@@ -194,9 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             $stmtUpdatePassword->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
             if ($stmtUpdatePassword->execute()) {
+                header("Location: Userinfo.php");
                 $mensaje = '¡Contraseña cambiada con éxito!';
                 $claseMensaje = 'alert-success';
-                header("Refresh: 2");
             } else {
                 $mensaje = 'Error al cambiar la contraseña. Inténtelo de nuevo.';
                 $claseMensaje = 'alert-danger';
@@ -273,29 +253,32 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
         </nav>
         <!-- Nav Bar Redes-->
 
+
         <!-- Header -->
         <header>
 
             <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-                <div class="container">
+                <div class="container d-flex justify-content-between align-items-center">
+
                     <a href="Inicio_Principal.php" class="navbar-brand">
                         <strong>Tienda Electronica</strong>
                     </a>
 
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
-                        <span class="navbar-toggler-icon"></span>
-                    </button>
+                    <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
+                        style="max-width: 600px;">
+                        <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
 
-                    <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;"
-                        id="navbarHeader">
-
+                    <div class="d-flex gap-2">
                         <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-
                         <a href="carrocompras.php" class="btn btn-primary position-relative">
-                            <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
-
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito
+                            <span id="num_cart"
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?php echo $num_cart; ?>
+                            </span>
+                        </a>
                     </div>
 
 
@@ -332,14 +315,23 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                 <div class="col-md-8 content">
                     <div>
                         <div class="div div-info">
-                            <div class="card card-user-info">
+                            <div class="card card-user-info mb-3">
                                 <div class="card-header bg-light fw-bold">
-                                    <h4 class="card-title fw-bold">Datos Personales</h4>
 
-                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
-                                        data-bs-target="#editDatosModal">
-                                        <i class="fa fa-edit"></i> Editar
-                                    </button>
+                                    <ul class="list-inline d-flex">
+                                        <li class="list-inline-item">
+                                            <h4 class="card-title fw-bold">Datos Personales</h4>
+                                        </li>
+                                        <li class="list-inline-item ms-auto">
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                data-bs-toggle="modal" data-bs-target="#editDatosModal">
+                                                <i class="fa fa-edit"></i> Editar
+                                            </button>
+                                        </li>
+                                    </ul>
+
+
+
                                 </div>
 
                                 <?php if ($mensaje): ?>
@@ -351,21 +343,46 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                                 <?php endif; ?>
 
                                 <div class="card-body">
-                                    <h6 class="card-title fw-bold">Nombre</h6>
-                                    <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' .
-                                        htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' .
-                                        htmlspecialchars($perfilUsuario['apellido_materno'] ?? '') ?></span>
-                                    <h6 class="card-title fw-bold">Telefono</h6>
-                                    <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
-                                    <h6 class="card-title fw-bold">Direccion</h6>
-                                    <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
-                                    <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
-                                    <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                                    <ul class="list-inline">
+                                        <li class="list-inline-item col-md-6">
+                                            <div >
+                                                <div class="mb-3">
+                                                    <h6 class="card-title fw-bold">Nombre</h6>
+                                                    <span><?= htmlspecialchars($perfilUsuario['nombre'] ?? '') . ' ' .
+                                                        htmlspecialchars($perfilUsuario['apellido_paterno'] ?? '') . ' ' .
+                                                        htmlspecialchars($perfilUsuario['apellido_materno'] ?? '') ?></span>
+                                                </div>
+                                                <div>
+                                                    <h6 class="card-title fw-bold">Direccion</h6>
+                                                    <span><?= htmlspecialchars($perfilUsuario['direccion'] ?? '') ?></span>
+                                                </div>
+                                            </div>
+                                        </li>
+                                        <li class="list-inline-item col-md-5">
+                                            <div >
+                                                <div class="mb-3">
+                                                    <h6 class="card-title fw-bold">Fecha de Nacimiento</h6>
+                                                    <span><?= htmlspecialchars($perfilUsuario['fecha_nacimiento'] ?? '') ?></span>
+                                                </div>
+                                                <div>
+                                                    <h6 class="card-title fw-bold">Telefono</h6>
+                                                    <span><?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?></span>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    </ul>
+
+
+
+
+
+
                                 </div>
                             </div>
 
 
-                            <div class="card card-user-info">
+                            <div class="card card-user-info mb-3">
+
                                 <div class="card-header bg-light fw-bold">
                                     <h4 class="card-title fw-bold">Email</h4>
                                 </div>
@@ -390,7 +407,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                                 </div>
                             </div>
 
-                            <div class="card card-user-info">
+                            <div class="card card-user-info mb-3">
                                 <div class="card-header bg-light fw-bold">
                                     <h4 class="card-title fw-bold">Contraseña</h4>
                                 </div>
@@ -434,7 +451,8 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
     <div class="modal fade" id="editDatosModal" tabindex="-1" aria-labelledby="editDatosModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" action="">
+
+                <form method="POST">
                     <div class="modal-header">
                         <h5 class="modal-title" id="editDatosModalLabel">Editar Datos Personales</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
@@ -452,13 +470,14 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                                 value="<?= htmlspecialchars($perfilUsuario['telefono'] ?? '') ?>" required>
                         </div>
                         <!-- Agrega un campo oculto para indicar la acción -->
-                        <input type="hidden" name="update_datos" value="1">
+                        <input type="hidden" name="update_datos" value="3">
                     </div>
                     <div class="modal-footer">
                         <button type="submit" class="btn btn-primary">Guardar Cambios</button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     </div>
                 </form>
+
             </div>
         </div>
     </div>

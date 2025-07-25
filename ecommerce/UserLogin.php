@@ -8,7 +8,7 @@ if (isset($_SESSION['usuario'])) {
     header('Location: UserInfo.php');
     exit();
 } else if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    
+
     $usuario = $_POST['usuario'];
     $clave = $_POST['clave'];
 
@@ -16,7 +16,7 @@ if (isset($_SESSION['usuario'])) {
     $sql = "SELECT uc.usuario, uc.clave, uc.rol
             FROM usuario_cliente uc
             WHERE uc.usuario = :usuario AND uc.clave = :clave"; // Usar $clave_hashed
-    
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
         ':usuario' => $usuario,
@@ -39,80 +39,88 @@ if (isset($_SESSION['usuario'])) {
 
 
 <!DOCTYPE html>
-<html lang="es" >
-  <head>
+<html lang="es">
+
+<head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Tienda Informatica</title>
 
-     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
-     
-     <link rel="stylesheet" href="css/index.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+        integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-      
-
-    </head>
-
-<header id="header">     
-<!-- Nav Bar Redes-->
- <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <nav class="navbar navbar-expand-lg bg-dark navbar-light">
-        <div class="container text-light">
-            <div class="w-100 d-flex justify-content-between">
-                <div>
-                    <i class="fa fa-envelope mx-2"></i>
-                    <a class="navbar-sm-brand text-light text-decoration-none" href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
-                    <i class="fa fa-phone mx-2"></i>
-                    <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854 555</a>
-                </div>
-                <div>
-                    <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
-                    <a class="text-light" href="https://www.instagram.com/" target="_blank"><i class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
-                    <a class="text-light" href="https://twitter.com/" target="_blank"><i class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
-                </div>
-            </div>
-        </div>
-    </nav>
-  </div>
-<!-- Nav Bar Redes-->
-
-<!-- Header -->
+    <link rel="stylesheet" href="css/index.css">
 
 
-   <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a href="Inicio_Principal.php" class="navbar-brand">
-                <strong>Tienda Electronica</strong>
-            </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
-            data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse"  style="display: flex; justify-content: flex-end;" id="navbarHeader">
-
-                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-                
-                <a href="carrocompras.php" class="btn btn-primary position-relative">
-                <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart;?></span></a>
-
-            </div>
-        
-    
-        </div>
-
-    </div>
-
-</header>
-
-<!-- Fin Header -->
+</head>
 
 <body>
+    <div class="wrapper">
+    <!-- Nav Bar Redes-->
+        <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
+            <div class="container text-light">
+                <div class="w-100 d-flex justify-content-between">
+                    <div>
+                        <i class="fa fa-envelope mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none"
+                            href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
+                        <i class="fa fa-phone mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854
+                            555</a>
+                    </div>
+                    <div>
+                        <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i
+                                class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://www.instagram.com/" target="_blank"><i
+                                class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://twitter.com/" target="_blank"><i
+                                class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <!-- Nav Bar Redes-->
 
- <div class="login-box">
+        <!-- Header -->
+        <header>
+
+            <div class="navbar navbar-expand-lg navbar-dark bg-dark">
+                <div class="container d-flex justify-content-between align-items-center">
+
+                    <a href="Inicio_Principal.php" class="navbar-brand">
+                        <strong>Tienda Electronica</strong>
+                    </a>
+
+                    <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
+                        style="max-width: 600px;">
+                        <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
+
+                    <div class="d-flex gap-2">
+                        <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                        <a href="carrocompras.php" class="btn btn-primary position-relative">
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito
+                            <span id="num_cart"
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?php echo $num_cart; ?>
+                            </span>
+                        </a>
+                    </div>
+
+
+                </div>
+
+            </div>
+
+        </header>
+
+        <!-- Fin Header -->
+
+    <div class="login-box">
         <h4 class="mb-4 text-center">Bienvenido Usuario</h4>
         <form method="POST">
             <div class="mb-3">
@@ -120,8 +128,9 @@ if (isset($_SESSION['usuario'])) {
                 <input type="text" class="form-control" id="usuario" name="usuario" required>
             </div>
             <div class="mb-3">
-                <label for="clave" class="form-label">Contraseña   
-                    <a href="UserRecoverPassword.php" class="text-info text-end text-decoration-none">¿Olvidaste tu contraseña?</a></label>
+                <label for="clave" class="form-label">Contraseña
+                    <a href="UserRecoverPassword.php" class="text-info text-end text-decoration-none">¿Olvidaste tu
+                        contraseña?</a></label>
                 <input type="password" class="form-control" id="clave" name="clave" required>
             </div>
             <div class="d-grid">
@@ -129,13 +138,12 @@ if (isset($_SESSION['usuario'])) {
             </div>
         </form>
         <div class="text-end mt-3">
-            <p>¿Aun no tienes una cuenta?  <a href="UserRegister.php" class="text-info text-decoration-none">Registrate</a></p>
+            <p>¿Aun no tienes una cuenta? <a href="UserRegister.php"
+                    class="text-info text-decoration-none">Registrate</a></p>
         </div>
     </div>
 
-</body>
-  
-<!-- Start Footer -->
+    <!-- Start Footer -->
     <footer class="bg-dark" id="footer">
         <div class="container">
             <div class="row">
@@ -157,15 +165,16 @@ if (isset($_SESSION['usuario'])) {
                         </li>
                         <li>
                             <i class="fa fa-envelope fa-fw"></i>
-                            <a class="text-decoration-none" href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
+                            <a class="text-decoration-none"
+                                href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
                         </li>
                     </ul>
                 </div>
 
                 <div class="col-md-4 pt-5">
-                    
+
                     <ul class="list-unstyled text-light footer-link-list">
-                    
+
                     </ul>
                 </div>
 
@@ -188,16 +197,19 @@ if (isset($_SESSION['usuario'])) {
                 <div class="col-auto me-auto">
                     <ul class="list-inline text-left footer-icons">
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="http://facebook.com/"><i class="fab fa-facebook-f fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank" href="http://facebook.com/"><i
+                                    class="fab fa-facebook-f fa-lg fa-fw"></i></a>
                         </li>
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="https://www.instagram.com/"><i class="fab fa-instagram fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank"
+                                href="https://www.instagram.com/"><i class="fab fa-instagram fa-lg fa-fw"></i></a>
                         </li>
                         <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="https://twitter.com/"><i class="fab fa-twitter fa-lg fa-fw"></i></a>
+                            <a class="text-light text-decoration-none" target="_blank" href="https://twitter.com/"><i
+                                    class="fab fa-twitter fa-lg fa-fw"></i></a>
                         </li>
                     </ul>
-                </div>               
+                </div>
             </div>
         </div>
 
@@ -207,7 +219,7 @@ if (isset($_SESSION['usuario'])) {
                     <div class="col-12">
                         <p class="text-left text-light">
                             Copyright &copy; 2025 ISUR
-                            
+
                         </p>
                     </div>
                 </div>
@@ -216,5 +228,7 @@ if (isset($_SESSION['usuario'])) {
 
     </footer>
     <!-- End Footer -->
+    <div>
+</body>
 
-</html>    
+</html>

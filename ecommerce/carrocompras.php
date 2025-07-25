@@ -40,68 +40,72 @@ if ($productos != null) {
 </head>
 
 <!-- Nav Bar Redes-->
-<nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
-    <div class="container text-light">
-        <div class="w-100 d-flex justify-content-between">
-            <div>
-                <i class="fa fa-envelope mx-2"></i>
-                <a class="navbar-sm-brand text-light text-decoration-none"
-                    href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
-                <i class="fa fa-phone mx-2"></i>
-                <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854 555</a>
+        <nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
+            <div class="container text-light">
+                <div class="w-100 d-flex justify-content-between">
+                    <div>
+                        <i class="fa fa-envelope mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none"
+                            href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
+                        <i class="fa fa-phone mx-2"></i>
+                        <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854
+                            555</a>
+                    </div>
+                    <div>
+                        <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i
+                                class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://www.instagram.com/" target="_blank"><i
+                                class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
+                        <a class="text-light" href="https://twitter.com/" target="_blank"><i
+                                class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
+                    </div>
+                </div>
             </div>
-            <div>
-                <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i
-                        class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
-                <a class="text-light" href="https://www.instagram.com/" target="_blank"><i
-                        class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
-                <a class="text-light" href="https://twitter.com/" target="_blank"><i
-                        class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
+        </nav>
+        <!-- Nav Bar Redes-->
+
+        <!-- Header -->
+        <header>
+
+            <div class="navbar navbar-expand-lg navbar-dark bg-dark">
+                <div class="container d-flex justify-content-between align-items-center">
+
+                    <a href="Inicio_Principal.php" class="navbar-brand">
+                        <strong>Tienda Electronica</strong>
+                    </a>
+
+                    <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
+                        style="max-width: 600px;">
+                        <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
+
+                    <div class="d-flex gap-2">
+                        <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
+                        <a href="carrocompras.php" class="btn btn-primary position-relative">
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito
+                            <span id="num_cart"
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?php echo $num_cart; ?>
+                            </span>
+                        </a>
+                    </div>
+
+
+                </div>
+
             </div>
-        </div>
-    </div>
-</nav>
-<!-- Nav Bar Redes-->
 
-<!-- Header -->
-<header>
+        </header>
 
-    <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a href="Inicio_Principal.php" class="navbar-brand">
-                <strong>Tienda Electronica</strong>
-            </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarHeader"
-                aria-controls="navbarHeader" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;" id="navbarHeader">
-
-                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-                <a href="carrocompras.php" class="btn btn-primary position-relative">
-                    <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
-                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
-
-            </div>
-
-
-        </div>
-
-    </div>
-
-</header>
-
-<!-- Fin Header -->
-
+        <!-- Fin Header -->
 <body>
 
     <div id="carrito-container" style="margin: 30px 200px;">
 
         <?php if (empty($lista_carrito)): ?>
             <tr>
-                <td colspan="5" class="text-center justify-content-center mb-3"><b>Lista vacia</b></td>
+                <div style="text-align: center; font-weight: bold;">Lista vacia</div>
             </tr>
         <?php else: ?>
 

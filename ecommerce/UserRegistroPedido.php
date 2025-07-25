@@ -165,29 +165,32 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
         </nav>
         <!-- Nav Bar Redes-->
 
+
         <!-- Header -->
         <header>
 
             <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-                <div class="container">
+                <div class="container d-flex justify-content-between align-items-center">
+
                     <a href="Inicio_Principal.php" class="navbar-brand">
                         <strong>Tienda Electronica</strong>
                     </a>
 
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#navbarHeader" aria-controls="navbarHeader" aria-label="Toggle navigation">
-                        <span class="navbar-toggler-icon"></span>
-                    </button>
+                    <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
+                        style="max-width: 600px;">
+                        <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
 
-                    <div class="collapse navbar-collapse" style="display: flex; justify-content: flex-end;"
-                        id="navbarHeader">
-
+                    <div class="d-flex gap-2">
                         <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-
                         <a href="carrocompras.php" class="btn btn-primary position-relative">
-                            <i class="fa-solid fa-cart-shopping"></i> Carrito <span id="num_cart"
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"><?php echo $num_cart; ?></span></a>
-
+                            <i class="fa-solid fa-cart-shopping"></i> Carrito
+                            <span id="num_cart"
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?php echo $num_cart; ?>
+                            </span>
+                        </a>
                     </div>
 
 
@@ -198,7 +201,6 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
         </header>
 
         <!-- Fin Header -->
-
 
 
         <div class="container-fluid">

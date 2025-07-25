@@ -37,20 +37,47 @@ if (!empty($filtroPrecioMax)) {
     $params[':precio_max'] = $filtroPrecioMax;
 }
 
+// Definir numero de cards por pagina y la pagina actual
+$productosPorPagina = 12;
 
-$sqlProductos = "SELECT p.producto_id, p.nombre, p.descripcion, p.marca, p.precio, c.nombre AS categoria,p.ruta_imagen as imagen
-                 FROM producto p
-                 LEFT JOIN categoria c ON p.categoria_id = c.categoria_id";
+$paginaActual = isset($_GET['pagina']) ? (int) $_GET['pagina'] : 1;
+if ($paginaActual < 1) {
+    $paginaActual = 1;
+}
+
+$offset = ($paginaActual - 1) * $productosPorPagina;
+
+
+
+$sqlProductos = "SELECT p.producto_id, p.nombre, p.descripcion, p.marca, p.precio, p.categoria_id ,p.ruta_imagen as imagen
+                 FROM producto p";
 
 if ($where) {
     $sqlProductos .= " WHERE " . implode(" AND ", $where);
 }
 
-$sqlProductos .= " ORDER BY p.producto_id DESC";
+$sqlProductos .= " ORDER BY p.producto_id DESC LIMIT :limite OFFSET :offset";
 
 $stmt = $pdo->prepare($sqlProductos);
-$stmt->execute($params);
+$stmt->bindValue(':limite', $productosPorPagina, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+foreach ($params as $key => $value) {
+    $stmt->bindValue($key, $value);
+}
+$stmt->execute();
 $productos = $stmt->fetchAll();
+
+// Cuenta todos los productos disponibles
+
+$sqlcount = "SELECT count(producto_id) as n_productos FROM producto";
+
+$stmtCount = $pdo->prepare($sqlcount);
+$stmtCount->execute();
+$totalProductos = $stmtCount->fetch(PDO::FETCH_ASSOC);
+
+// Calcula el total de páginas
+$totalPaginas = ceil($totalProductos['n_productos'] / $productosPorPagina);
+
 ?>
 
 
@@ -160,15 +187,17 @@ $productos = $stmt->fetchAll();
                         <div class="mb-3">
                             <ul class="list-inline">
                                 <li class="list-inline-item">
-                                    <input name="precio_min" class="form-control" type="number" id="precio-min" name="precio-min" min="0"
-                                        max="<?= htmlspecialchars($precioAlto['precio']) ?>" placeholder="0">
+                                    <input name="precio_min" class="form-control" type="number" id="precio-min"
+                                        name="precio-min" min="0" max="<?= htmlspecialchars($precioAlto['precio']) ?>"
+                                        placeholder="0">
                                 </li>
                                 <li class="list-inline-item">
                                     <p>-</p>
                                 </li>
                                 <li class="list-inline-item ">
-                                    <input name="precio_max" class="form-control" type="number" id="precio-max" name="precio-max" min="0"
-                                        max="<?= htmlspecialchars($precioAlto['precio']) ?>"  placeholder="<?= htmlspecialchars($precioAlto['precio']) ?>">
+                                    <input name="precio_max" class="form-control" type="number" id="precio-max"
+                                        name="precio-max" min="0" max="<?= htmlspecialchars($precioAlto['precio']) ?>"
+                                        placeholder="<?= htmlspecialchars($precioAlto['precio']) ?>">
                                 </li>
                             </ul>
                         </div>
@@ -212,6 +241,44 @@ $productos = $stmt->fetchAll();
                                 </div>
                             </div>
                         <?php endforeach; ?>
+
+                        <nav aria-label="Paginación">
+                            <ul class="pagination justify-content-center">
+                                <?php if ($paginaActual > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?<?php
+                                        // Mantener los filtros en la URL
+                                        parse_str($_SERVER['QUERY_STRING'], $query_params);
+                                        $query_params['pagina'] = $paginaActual - 1;
+                                        echo http_build_query($query_params);
+                                        ?>">Anterior</a>
+                                    </li>
+                                <?php endif; ?>
+
+                                <?php for ($i = 1; $i <= $totalPaginas; $i++): ?>
+                                    <li class="page-item <?= $i == $paginaActual ? 'active' : '' ?>">
+                                        <a class="page-link" href="?<?php
+                                        // Mantener los filtros en la URL
+                                        parse_str($_SERVER['QUERY_STRING'], $query_params);
+                                        $query_params['pagina'] = $i;
+                                        echo http_build_query($query_params);
+                                        ?>"><?= $i ?></a>
+                                    </li>
+                                <?php endfor; ?>
+
+                                <?php if ($paginaActual < $totalPaginas): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?<?php
+                                        // Mantener los filtros en la URL
+                                        parse_str($_SERVER['QUERY_STRING'], $query_params);
+                                        $query_params['pagina'] = $paginaActual + 1;
+                                        echo http_build_query($query_params);
+                                        ?>">Siguiente</a>
+                                    </li>
+                                <?php endif; ?>
+                            </ul>
+                        </nav>
+
                         <?php if (empty($productos)): ?>
                             <p>No hay productos que coincidan con los filtros.</p>
                         <?php endif; ?>

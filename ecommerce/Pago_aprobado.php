@@ -19,67 +19,6 @@ if (!$cliente) {
     $usuarioclienteId = $cliente['usuario_cliente_id'];
 }
 
-$productoSeleccionados = isset($_SESSION['carrito']['productoSeleccionados']) ? $_SESSION['carrito']['productoSeleccionados'] : null;
-
-if ($productoSeleccionados != null) {
-} else {
-    header("Location: Inicio_Principal.php");
-    exit;
-}
-
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['RealizarPedido'])) {
-    $conteo = 0;
-
-    if (is_array($productoSeleccionados)) {
-        foreach ($productoSeleccionados as $elemento) {
-            if (is_array($elemento)) {
-                $conteo++;
-            }
-        }
-    }
-
-    if ($conteo) {
-        $pdo->beginTransaction();
-
-        try {
-            // USAR NOW() en lugar de CURRENT_DATE
-            $stmt = $pdo->prepare("INSERT INTO compra (usuario_cliente_id,fecha_compra, estado_id, almacen_id)
-                                   VALUES (:usuario_id, NOW(), '1','1') RETURNING compra_id");
-            $stmt->execute([':usuario_id' => $usuarioclienteId]);
-            $compraId = $stmt->fetchColumn();
-
-            $stmt = $pdo->prepare("INSERT INTO detalle_compra
-                (compra_id, producto_id, proveedor_id, cantidad, precio_unitario)
-                VALUES (:compra_id, :producto_id, '1', :cantidad, :precio)");
-
-            foreach ($productoSeleccionados as $producto) {
-
-                $_id = $producto['id'];
-                $precio = $producto['precio'];
-                $cantidad = $producto['cantidad'];
-
-                $stmt->execute([
-                    ':compra_id' => $compraId,
-                    ':producto_id' => $_id,
-                    ':cantidad' => $cantidad,
-                    ':precio' => $precio
-                ]);
-            }
-            
-            $_SESSION['carrito']['productos'] = [];
-       
-            $pdo->commit();
-            header("Location: Pago_aprobado.php");
-            exit();
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            die("Error al registrar pedido: " . $e->getMessage());
-        }
-    }
-
-
-} 
 ?>
 
 
@@ -137,12 +76,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['RealizarPedido'])) {
                 <strong>Tienda Electronica</strong>
             </a>
 
-            <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
-                style="max-width: 600px;">
-                <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
-                <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
-            </form>
-
             <div class="d-flex gap-2">
                 <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
                 <a href="carrocompras.php" class="btn btn-primary position-relative">
@@ -164,118 +97,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['RealizarPedido'])) {
 <!-- Fin Header -->
 
 
+
         <div class="content">
-            <div class="container">
-                <br><br>
 
-                <div class="table-responsive">
-                    <table class="table" style="text-align: center;">
-                        <thead>
-                            <tr>
-                                <th>Imagen</th>
-                                <th>Producto</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($productoSeleccionados)) {
-                                echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                            } else {
-                                $total = 0;
-                                foreach ($productoSeleccionados as $producto) {
-
-                                    $_id = $producto['id'];
-                                    $nombre = $producto['nombre'];
-                                    $precio = $producto['precio'];
-                                    $cantidad = $producto['cantidad'];
-                                    $subtotal = $producto['subtotal'];
-                                    $total += $subtotal;
-                                    ?>
-                                    <tr id="info_productos">
-                                        <td style="display: none;"><?php echo $_id; ?></td>
-
-                                        <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                                                <img class="icontable" style="width: 100px; height: auto;"
-                                                    src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>">
-                                            </a></td>
-
-                                        <td><?php echo $nombre; ?></td>
-
-                                        <td style="display: none;"><?php echo $precio; ?></td>
-
-                                        <td>
-                                            <div id="subtotal_<?php echo $_id; ?>" name="subtotal[]">
-                                                <?php echo 'S/.' . number_format($subtotal, 2, '.', ','); ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php } ?>
-
-                                <tr>
-                                    <td colspan="4">
-                                        <p class="h3 text-end" id="total" name="name">
-                                            <?php echo 'S/.' . number_format($total, 2, '.', ','); ?>
-                                        </p>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        <?php } ?>
-                    </table>
+            <div class="container d-flex justify-content-center align-items-center" style="height: 100vh;">
+                <div class="text-center">
+                    <img src="imgs/compra_aprobada.png" alt="Pago Aprobado" style="max-width: 200px; height: auto;">
+                    <h1 class="mt-3 pb-3">Compra realizada con éxito</h1>
+                    <a href="Inicio_Principal.php" class="btn btn-primary">Regresar al inicio principal</a>
                 </div>
-
-                <form id="form_RealizarPedido" method="POST">
-                    <input type="hidden" name="RealizarPedido" id="RealizarPedido" value="9" />
-
-                    <button type="submit" class="btn btn-primary">Realizar Compra</button>
-
-                </form>
             </div>
-
-
-
-            <br><br>
-
-
-            <script>
-
-                function EnviarProductos() {
-
-                    const filas = document.querySelectorAll('#info_productos')
-                    const productos = []
-
-                    filas.forEach(function (tr) {
-                        const celdas = tr.querySelectorAll('td')
-
-                        // Extrae los datos de las celdas, ajusta según tu estructura
-                        const id = celdas[0].innerText.trim() // ID oculto en la primera columna
-                        const nombre = celdas[2].innerText.trim() // Producto
-                        const precio = celdas[3].innerText.trim() // Precio
-                        const cantidad = celdas[4].innerText.trim() // Cantidad
-
-                        console.log(productos)
-
-                        productos.push({
-                            id: id,
-                            nombre: nombre,
-                            precio: precio,
-                            cantidad: cantidad
-                        });
-                    });
-
-
-                    // Convertir a JSON
-                    const productosJSON = JSON.stringify(productos)
-
-                    // Asignar al input oculto
-                    document.getElementById('productos_json').value = productosJSON
-
-                    // Enviar el formulario
-                    document.getElementById('form_productos').submit()
-                }
-
-
-            </script>
-
 
 
 
