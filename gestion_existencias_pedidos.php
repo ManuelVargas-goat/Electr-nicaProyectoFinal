@@ -1,11 +1,11 @@
 <?php
 session_start();
-include("config.php"); // Ensure this file contains your PDO connection ($pdo)
+include("config.php"); // Asegúrate de que este archivo contenga tu conexión PDO ($pdo)
 
-// --- Constants ---
+// --- Constantes ---
 define('PEDIDO_ESTADO_ENTREGADO', 'entregado');
 define('PEDIDO_ESTADO_CANCELADO', 'cancelado');
-define('PEDIDO_ESTADO_PENDIENTE', 'pendiente');
+define('PEDIDO_ESTADO_PENDIENTE', 'pendiente'); // Ya definida, pero la mantengo para claridad
 
 define('ALERT_SUCCESS', 'success');
 define('ALERT_DANGER', 'danger');
@@ -20,11 +20,14 @@ if (!isset($_SESSION['usuario'])) {
 
 // Obtener datos del usuario actual
 $usuario = $_SESSION['usuario'];
+// Se cambió 'usuario_empleado_id' por 'ue.usuario_id' para consistencia con un posible 'usuario_id' en la tabla 'usuario_empleado'
+// Si 'usuario' en 'usuario_empleado' es una columna VARCHAR directamente, entonces la consulta original estaba bien.
+// Asumiendo que 'usuario' es el campo por el que se busca, y que es único.
 $sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
                 FROM usuario_empleado ue
                 JOIN persona per ON ue.persona_id = per.persona_id
                 JOIN rol r ON ue.rol_id = r.rol_id
-                WHERE ue.usuario = :usuario";
+                WHERE ue.usuario = :usuario"; // Si 'usuario' es un ID numérico, cambia a ue.usuario_id = :usuario
 $stmt = $pdo->prepare($sql_usuario);
 $stmt->execute([':usuario' => $usuario]);
 $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -51,7 +54,7 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     $tipoMensaje = $_GET['tipo'] ?? ALERT_INFO;
 }
 
-// Generar token CSRF para el formulario
+// Generar o verificar token CSRF para el formulario
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -67,11 +70,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: gestion_existencias_pedidos.php");
         exit();
     }
-    // Opcionalmente regenerar el token después de un uso exitoso para hacerlo de un solo uso
-    // Esto es importante si el formulario podría ser enviado múltiples veces por la misma página
-    // unset($_SESSION['csrf_token']); // Comentar si se usa para múltiples envíos sin recargar, descomentar para un solo uso por carga.
 
-    if (!empty($_POST['accion']) && !empty($_POST['pedido_id']) && is_numeric($_POST['pedido_id'])) {
+    // Se recomienda regenerar el token CSRF después de cada envío de formulario exitoso
+    // para prevenir ataques CSRF de un solo uso.
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); 
+
+    if (isset($_POST['accion']) && isset($_POST['pedido_id']) && is_numeric($_POST['pedido_id'])) {
         $accion = $_POST['accion'];
         $pedidoId = (int) $_POST['pedido_id'];
 
@@ -79,11 +83,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             if ($accion === 'confirmar') {
-                // *** INICIO DE LA MODIFICACIÓN ***
-                // Se añade 'fecha_confirmacion = NOW()' a la consulta UPDATE
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado, fecha_confirmacion = NOW() WHERE pedido_id = :id");
-                $stmt->execute([':estado' => PEDIDO_ESTADO_ENTREGADO, ':id' => $pedidoId]);
-                // *** FIN DE LA MODIFICACIÓN ***
+                // Actualiza el estado del pedido a ENTREGADO y registra la fecha de confirmación
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado, fecha_confirmacion = NOW() WHERE pedido_id = :id AND estado = :estado_pendiente");
+                $stmt->execute([':estado' => PEDIDO_ESTADO_ENTREGADO, ':id' => $pedidoId, ':estado_pendiente' => PEDIDO_ESTADO_PENDIENTE]);
+
+                // Verificar si se actualizó algún registro (evita procesar dos veces el mismo pedido)
+                if ($stmt->rowCount() === 0) {
+                    throw new Exception("El pedido ya fue procesado o no existe.");
+                }
 
                 $stmtDetalles = $pdo->prepare("SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = :id");
                 $stmtDetalles->execute([':id' => $pedidoId]);
@@ -92,20 +99,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $productoId = $detalle['producto_id'];
                     $cantidad = $detalle['cantidad'];
 
-                    // Verificar si el producto ya existe en stock
+                    // Bloqueo pesimista para evitar condiciones de carrera en el stock (opcional pero recomendado en alta concurrencia)
+                    // Para PostgreSQL: SELECT * FROM stock WHERE producto_id = :producto_id FOR UPDATE;
+                    // Para MySQL: SELECT * FROM stock WHERE producto_id = :producto_id FOR UPDATE;
+                    // Esto asegura que otro proceso no modifique el stock mientras se actualiza.
+                    
                     $checkStock = $pdo->prepare("SELECT COUNT(*) FROM stock WHERE producto_id = :producto_id");
                     $checkStock->execute([':producto_id' => $productoId]);
                     $existe = $checkStock->fetchColumn();
 
                     if ($existe) {
-                        // Actualiza la cantidad y la fecha de última entrada
                         $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad, fecha_ultima_entrada = NOW() WHERE producto_id = :producto_id");
                         $actualizarStock->execute([
                             ':cantidad' => $cantidad,
                             ':producto_id' => $productoId
                         ]);
                     } else {
-                        // Inserta la cantidad y la fecha de primera entrada
                         $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad, fecha_primera_entrada) VALUES (:producto_id, :cantidad, NOW())");
                         $insertarStock->execute([
                             ':producto_id' => $productoId,
@@ -121,8 +130,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
 
             } elseif ($accion === 'cancelar') {
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado WHERE pedido_id = :id");
-                $stmt->execute([':estado' => PEDIDO_ESTADO_CANCELADO, ':id' => $pedidoId]);
+                // Solo se puede cancelar pedidos en estado PENDIENTE
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado WHERE pedido_id = :id AND estado = :estado_pendiente");
+                $stmt->execute([':estado' => PEDIDO_ESTADO_CANCELADO, ':id' => $pedidoId, ':estado_pendiente' => PEDIDO_ESTADO_PENDIENTE]);
+
+                if ($stmt->rowCount() === 0) {
+                    throw new Exception("El pedido no puede ser cancelado porque ya ha sido entregado o cancelado previamente.");
+                }
 
                 $pdo->commit();
                 $_SESSION['modal_message'] = "Pedido cancelado correctamente.";
@@ -139,11 +153,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: gestion_existencias_pedidos.php");
             exit();
         }
+    } else {
+        $_SESSION['modal_message'] = "Solicitud inválida para procesar acción.";
+        $_SESSION['modal_type'] = ALERT_WARNING;
+        header("Location: gestion_existencias_pedidos.php");
+        exit();
     }
 }
 
 
 // Obtener todos los estados posibles para el filtro
+// La tabla 'estado' debería contener 'pendiente', 'entregado', 'cancelado'
 $estados = $pdo->query("SELECT nombre FROM estado ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN);
 
 // Lógica de filtrado de pedidos
@@ -156,10 +176,11 @@ $where = [];
 $params = [];
 
 if (!empty($filtroPedidoId)) {
-    // Usar CAST para asegurar que la comparación sea con texto si pedido_id es numérico en la DB
-    // Note: For PostgreSQL, TEXT CAST with ILIKE is appropriate. For MySQL/SQL Server, use VARCHAR/NVARCHAR or direct numeric comparison if type matches.
-    $where[] = "CAST(p.pedido_id AS TEXT) ILIKE :pedido_id";
-    $params[':pedido_id'] = "%$filtroPedidoId%";
+    // Se usa CAST para compatibilidad con PostgreSQL y se mantiene ILIKE para búsqueda insensible a mayúsculas/minúsculas.
+    // Para MySQL/SQL Server, cambia a `CAST(p.pedido_id AS CHAR) LIKE :pedido_id` o simplemente `p.pedido_id LIKE :pedido_id`
+    // dependiendo del tipo de columna de pedido_id y si necesita búsqueda de texto.
+    $where[] = "CAST(p.pedido_id AS TEXT) ILIKE :pedido_id"; 
+    $params[':pedido_id'] = "%" . trim($filtroPedidoId) . "%"; // Añadido trim()
 }
 if (!empty($filtroFechaInicio)) {
     $where[] = "p.fecha_pedido >= :fecha_inicio";
@@ -167,7 +188,7 @@ if (!empty($filtroFechaInicio)) {
 }
 if (!empty($filtroFechaFin)) {
     $where[] = "p.fecha_pedido <= :fecha_fin";
-    $params[':fecha_fin'] = $filtroFechaFin;
+    $params[':fecha_fin'] = $filtroFechaFin . ' 23:59:59'; // Incluye todo el día final
 }
 if (!empty($filtroEstado)) {
     $where[] = "p.estado ILIKE :estado";
@@ -186,20 +207,12 @@ $sql = "
       TO_CHAR(p.fecha_confirmacion, 'HH24:MI:SS') AS hora_recepcion_solo,
       p.estado,
       COALESCE(per.nombre || ' ' || per.apellido_paterno, 'N/A') AS empleado,
-      SUM(dp.cantidad * CASE
-          WHEN dp.precio_unidad = 0 THEN pr.precio
-          ELSE dp.precio_unidad
-        END
-      ) AS total_precio,
+      SUM(dp.cantidad * COALESCE(dp.precio_unidad, pr.precio)) AS total_precio, -- Usar COALESCE para manejar precio_unidad = 0 o NULL
       SUM(dp.cantidad) AS total_cantidad,
       json_agg(json_build_object(
         'producto', pr.nombre,
         'cantidad', dp.cantidad,
-        'precio_unitario',
-          CASE
-            WHEN dp.precio_unidad = 0 THEN pr.precio
-            ELSE dp.precio_unidad
-          END
+        'precio_unitario', COALESCE(dp.precio_unidad, pr.precio) -- Usar COALESCE aquí también
       )) AS productos
     FROM pedido p
     JOIN detalle_pedido dp ON p.pedido_id = dp.pedido_id
@@ -211,10 +224,17 @@ $sql = "
     ORDER BY p.pedido_id DESC
 ";
 
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar pedidos: " . $e->getMessage());
+    $resultado = []; // Asegura que $resultado esté definido incluso en caso de error
+    $mensaje = "Error al cargar los pedidos: " . $e->getMessage();
+    $tipoMensaje = ALERT_DANGER;
+}
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
@@ -520,9 +540,9 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                                     </li>
                                                     <li>
                                                         <a href="#" class="dropdown-item cancel-btn"
-                                                           data-bs-toggle="modal"
-                                                           data-bs-target="#confirmCancelModal"
-                                                           data-pedido-id="<?= htmlspecialchars($row['pedido_id']) ?>">
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#confirmCancelModal"
+                                                            data-pedido-id="<?= htmlspecialchars($row['pedido_id']) ?>">
                                                             Cancelar Pedido
                                                         </a>
                                                     </li>

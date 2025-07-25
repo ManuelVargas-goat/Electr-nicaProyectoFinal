@@ -21,6 +21,7 @@ $usuario = $_SESSION['usuario'];
 $sqlEmpleado = "SELECT ue.usuario_empleado_id, p.nombre || ' ' || p.apellido_paterno AS nombre
                 FROM usuario_empleado ue
                 JOIN persona p ON ue.persona_id = p.persona_id
+                JOIN rol r ON ue.rol_id = r.rol_id
                 WHERE ue.usuario = :usuario";
 $stmtEmpleado = $pdo->prepare($sqlEmpleado);
 $stmtEmpleado->execute(['usuario' => $usuario]);
@@ -47,6 +48,8 @@ $pedidos = $pdo->query($sqlPedidos)->fetchAll(PDO::FETCH_ASSOC);
 
 
 // --- Consulta de Relaciones (solo para pedidos "entregados") ---
+// Esta consulta obtiene los detalles de los productos de pedidos entregados
+// y calcula la cantidad ya devuelta a proveedor para cada producto/proveedor/pedido.
 $sqlRelaciones = "
     SELECT
         dp.pedido_id,
@@ -56,7 +59,7 @@ $sqlRelaciones = "
         prov.nombre_empresa,
         dp.cantidad AS cantidad_original_pedido,
         -- Suma las cantidades devueltas *para este producto y proveedor específicamente de devoluciones relacionadas con este pedido*
-        COALESCE(SUM(ddet.cantidad) FILTER (WHERE dev.tipo = 'proveedor' AND dev.pedido_original_id = dp.pedido_id), 0) AS cantidad_devuelta_proveedor
+        COALESCE(SUM(ddet.cantidad) FILTER (WHERE dev.tipo = 'proveedor' AND dev.pedido_original_id = dp.pedido_id AND ddet.producto_id = dp.producto_id AND ddet.proveedor_id = dp.proveedor_id), 0) AS cantidad_devuelta_proveedor
     FROM detalle_pedido dp
     JOIN producto prod ON dp.producto_id = prod.producto_id
     JOIN proveedor prov ON dp.proveedor_id = prov.proveedor_id
@@ -65,8 +68,8 @@ $sqlRelaciones = "
     -- Unir a devolucion y detalle_devolucion para calcular las cantidades ya devueltas
     LEFT JOIN devolucion dev ON dev.pedido_original_id = dp.pedido_id
     LEFT JOIN detalle_devolucion ddet ON ddet.devolucion_id = dev.devolucion_id
-                                       AND ddet.producto_id = dp.producto_id
-                                       AND ddet.proveedor_id = dp.proveedor_id
+                                     AND ddet.producto_id = dp.producto_id
+                                     AND ddet.proveedor_id = dp.proveedor_id
 
     WHERE p.estado = 'entregado' -- Solo pedidos en estado 'entregado'
     GROUP BY dp.pedido_id, prod.producto_id, prod.nombre, dp.proveedor_id, prov.nombre_empresa, dp.cantidad
@@ -80,9 +83,14 @@ foreach ($relaciones as $rel) {
     if (!isset($mapa_relaciones[$rel['pedido_id']])) {
         $mapa_relaciones[$rel['pedido_id']] = [];
     }
+    // La cantidad disponible para devolver es la cantidad original menos lo ya devuelto a proveedor
     $rel['cantidad_disponible_para_devolver'] = $rel['cantidad_original_pedido'] - $rel['cantidad_devuelta_proveedor'];
-    $mapa_relaciones[$rel['pedido_id']][$rel['producto_id']] = $rel;
+    // Solo añadir si aún hay cantidad disponible para devolver
+    if ($rel['cantidad_disponible_para_devolver'] > 0) {
+        $mapa_relaciones[$rel['pedido_id']][$rel['producto_id']] = $rel;
+    }
 }
+
 
 // Procesar formulario de registro de devolución
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -90,72 +98,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $csrf_token) {
         $_SESSION['modal_message'] = "Error de seguridad: Solicitud no válida.";
         $_SESSION['modal_type'] = ALERT_DANGER;
-        header("Location: gestion_existencias_devoluciones.php");
+        header("Location: nueva_devolucion.php"); // Redirigir a la misma página para mostrar el error
         exit();
     }
-    unset($_SESSION['csrf_token']); // Regenerar el token después de un uso exitoso
+    // Regenerar el token después de un uso exitoso
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); 
 
     $pedidoId = filter_var($_POST['pedido_id'], FILTER_VALIDATE_INT);
     $productoId = filter_var($_POST['producto_id'], FILTER_VALIDATE_INT);
     $cantidad = filter_var($_POST['cantidad'], FILTER_VALIDATE_INT);
     $motivo = htmlspecialchars(trim($_POST['motivo']));
-    $reingresado = isset($_POST['reingresado_stock']);
+    $reingresado = isset($_POST['reingresado_stock']); // Checkbox para generar pedido de reemplazo
     $proveedorId = filter_var($_POST['proveedor_id'], FILTER_VALIDATE_INT);
 
     // Validaciones básicas de entrada
     if (!$pedidoId || !$productoId || !$cantidad || empty($motivo) || !$proveedorId || $cantidad <= 0) {
         $_SESSION['modal_message'] = "Todos los campos son obligatorios y válidos.";
         $_SESSION['modal_type'] = ALERT_DANGER;
-        header("Location: gestion_existencias_devoluciones.php");
+        header("Location: nueva_devolucion.php");
         exit();
     }
 
-    // --- CORRECCIÓN CLAVE EN LA VALIDACIÓN ($sql_validation) ---
-    // También debe usar el pedido_original_id para la suma de devoluciones.
-    $sql_validation = "
-        SELECT
-            dp.cantidad AS cantidad_original_pedido,
-            COALESCE(SUM(ddet.cantidad) FILTER (WHERE d.tipo = 'proveedor' AND d.pedido_original_id = dp.pedido_id), 0) AS total_cantidad_devuelta_proveedor
-        FROM detalle_pedido dp
-        JOIN pedido p ON dp.pedido_id = p.pedido_id
-        LEFT JOIN devolucion d ON d.pedido_original_id = dp.pedido_id
-        LEFT JOIN detalle_devolucion ddet ON ddet.devolucion_id = d.devolucion_id
-                                           AND ddet.producto_id = dp.producto_id
-                                           AND ddet.proveedor_id = dp.proveedor_id
-        WHERE dp.pedido_id = :pedido_id AND dp.producto_id = :producto_id AND dp.proveedor_id = :proveedor_id
-        GROUP BY dp.cantidad;
-    ";
-    $stmt_validation = $pdo->prepare($sql_validation);
-    $stmt_validation->execute([
-        ':pedido_id' => $pedidoId,
-        ':producto_id' => $productoId,
-        ':proveedor_id' => $proveedorId
-    ]);
-    $validation_data = $stmt_validation->fetch(PDO::FETCH_ASSOC);
+    // Validación de cantidad a devolver vs. cantidad disponible
+    // Se usa el mapa_relaciones precalculado para evitar otra consulta a la DB
+    $cantidad_original = $mapa_relaciones[$pedidoId][$productoId]['cantidad_original_pedido'] ?? 0;
+    $cantidad_ya_devuelta = $mapa_relaciones[$pedidoId][$productoId]['cantidad_devuelta_proveedor'] ?? 0;
+    $cantidad_disponible_devolver = $cantidad_original - $cantidad_ya_devuelta;
 
-    if ($validation_data) {
-        $cantidad_original = $validation_data['cantidad_original_pedido'];
-        $cantidad_ya_devuelta = $validation_data['total_cantidad_devuelta_proveedor'];
-        $cantidad_disponible_devolver = $cantidad_original - $cantidad_ya_devuelta;
-
-        if ($cantidad > $cantidad_disponible_devolver || $cantidad_disponible_devolver <= 0) {
-            $_SESSION['modal_message'] = "Error: Cantidad a devolver no válida o excede la disponible ($cantidad_disponible_devolver). Revise las devoluciones previas.";
-            $_SESSION['modal_type'] = ALERT_DANGER;
-            header("Location: gestion_existencias_devoluciones.php");
-            exit();
-        }
-    } else {
-        $_SESSION['modal_message'] = "Error: No se encontró el producto en el pedido especificado o datos inválidos.";
+    if ($cantidad > $cantidad_disponible_devolver || $cantidad_disponible_devolver <= 0) {
+        $_SESSION['modal_message'] = "Error: Cantidad a devolver no válida o excede la disponible ($cantidad_disponible_devolver). Revise las devoluciones previas.";
         $_SESSION['modal_type'] = ALERT_DANGER;
-        header("Location: gestion_existencias_devoluciones.php");
+        header("Location: nueva_devolucion.php");
         exit();
     }
 
     try {
         $pdo->beginTransaction();
 
-        // 1. Insertar en la tabla devolucion
-        // ¡Importante!: Aquí debes almacenar el pedido_id original en pedido_original_id
+        // 1. Insertar en la tabla devolucion (tipo 'proveedor')
+        // Se almacena el pedido_id original en pedido_original_id
         $sql = "INSERT INTO devolucion (fecha, tipo, usuario_empleado_id, observaciones, pedido_original_id)
                 VALUES (CURRENT_TIMESTAMP, 'proveedor', :empleado_id, :motivo, :pedido_original_id)
                 RETURNING devolucion_id";
@@ -177,10 +158,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':proveedor_id' => $proveedorId,
             ':cantidad' => $cantidad,
             ':motivo' => $motivo,
-            ':reingresado' => $reingresado ? 'true' : 'false'
+            ':reingresado' => 'false' // Para devoluciones a proveedor, no se "reingresa" stock
         ]);
 
-        // 3. Si se debe reingresar al stock, generar un nuevo pedido "interno"
+        // 3. ¡ACTUALIZAR EL STOCK! (Decremento para devoluciones a proveedor)
+        $sqlUpdateStock = "UPDATE stock SET cantidad = cantidad - :cantidad, fecha_ultima_entrada = NOW() WHERE producto_id = :producto_id";
+        $stmtUpdateStock = $pdo->prepare($sqlUpdateStock);
+        $stmtUpdateStock->execute([
+            ':cantidad' => $cantidad,
+            ':producto_id' => $productoId
+        ]);
+
+        // 4. Si se marcó "Reingresar al stock" (generar pedido de reemplazo), crear un nuevo pedido "interno"
         if ($reingresado) {
             $sqlPedido = "INSERT INTO pedido (fecha_pedido, estado, usuario_empleado_id, almacen_id)
                           VALUES (NOW(), 'pendiente', :empleado_id, NULL)
@@ -197,11 +186,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':devolucion_id' => $devolucionId
             ]);
 
+            // Obtener el precio actual del producto para el detalle del nuevo pedido
             $sqlGetPrecio = "SELECT precio FROM producto WHERE producto_id = :producto_id";
             $stmtGetPrecio = $pdo->prepare($sqlGetPrecio);
             $stmtGetPrecio->execute([':producto_id' => $productoId]);
             $precioUnitario = $stmtGetPrecio->fetchColumn();
 
+            // Insertar el detalle para el nuevo pedido de reemplazo
             $sqlDetallePedido = "INSERT INTO detalle_pedido (pedido_id, producto_id, proveedor_id, cantidad, precio_unidad)
                                  VALUES (:pedido_id, :producto_id, :proveedor_id, :cantidad, :precio_unidad)";
             $stmt = $pdo->prepare($sqlDetallePedido);
@@ -224,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['modal_message'] = "Error al registrar devolución: " . $e->getMessage();
         $_SESSION['modal_type'] = ALERT_DANGER;
         error_log("Error al registrar devolución: " . $e->getMessage());
-        header("Location: gestion_existencias_devoluciones.php");
+        header("Location: nueva_devolucion.php"); // Redirigir de vuelta al formulario con el error
         exit();
     }
 }
@@ -296,7 +287,7 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
 
         <div class="form-check mb-3">
             <input type="checkbox" name="reingresado_stock" class="form-check-input" id="reingresado_stock">
-            <label class="form-check-label" for="reingresado_stock">Reingresar al stock (generar pedido de reemplazo)</label>
+            <label class="form-check-label" for="reingresado_stock">Generar pedido de reemplazo al proveedor</label>
         </div>
 
         <div class="d-flex justify-content-between">

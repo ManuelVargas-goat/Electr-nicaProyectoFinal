@@ -1,9 +1,7 @@
 <?php
-session_start(); // Inicia la sesión para acceder al carrito
+session_start(); // Inicia la sesión
 
 // --- Configuración de la Base de Datos PostgreSQL ---
-// ¡IMPORTANTE! Estos valores han sido actualizados con tu configuración.
-// Asegúrate de que tu servidor PostgreSQL esté en ejecución y accesible en este puerto.
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'TiendaElectro');
 define('DB_USER', 'juan');
@@ -12,38 +10,23 @@ define('DB_PORT', '5432'); // Puerto de PostgreSQL
 
 $conn = null;
 try {
-    // Establecer conexión a la base de datos usando PDO
-    // Se incluye el puerto en la cadena de conexión
     $conn = new PDO("pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME, DB_USER, DB_PASSWORD);
-    // Establecer el modo de error de PDO a excepción para una mejor depuración
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Opcional: Establecer el juego de caracteres a UTF-8
     $conn->exec("SET NAMES 'UTF8'");
 } catch (PDOException $e) {
-    // En un entorno de producción, es mejor registrar el error detallado (error_log)
-    // y mostrar un mensaje genérico al usuario por seguridad.
-    error_log("Error de conexión a la base de datos: " . $e->getMessage()); // Esto guarda el error en los logs del servidor
-    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde."); // Mensaje para el usuario
+    error_log("Error de conexión a la base de datos en login.php: " . $e->getMessage());
+    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
 }
 
-// --- Obtener productos de la base de datos (con stock) ---
-$products = [];
-try {
-    $stmt = $conn->query("SELECT p.producto_id as id, p.nombre, p.precio, p.marca, p.descripcion, p.ruta_imagen, p.categoria_id, COALESCE(s.cantidad, 0) as stock_quantity FROM producto p LEFT JOIN stock s ON p.producto_id = s.producto_id WHERE p.descontinuado = FALSE ORDER BY p.nombre ASC");
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    error_log("Error al obtener productos: " . $e->getMessage());
-    // Si hay un error al obtener productos, la página se mostrará sin ellos.
-    $products = [];
-}
+$login_message = ''; // Mensaje para mostrar al usuario (éxito o error)
 
-// --- Obtener categorías de la base de datos ---
+// --- Obtener categorías para la navegación (similar a otras páginas) ---
 $categories = [];
 try {
     $stmt = $conn->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre ASC");
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("Error al obtener categorías: " . $e->getMessage());
+    error_log("Error al obtener categorías en login.php: " . $e->getMessage());
     $categories = [];
 }
 
@@ -55,29 +38,62 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 
-// Verificar si el usuario está logeado para personalizar la navegación
-$is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
-$user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate'; // Asume 'user_usuario' se establece en login.php
+// --- Procesar el formulario de inicio de sesión ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+    $usuario = trim($_POST['usuario']); // Cambiado de 'email' a 'usuario'
+    $clave = trim($_POST['clave']);     // Cambiado de 'password' a 'clave'
+
+    if (empty($usuario) || empty($clave)) {
+        $login_message = "<div class='alert alert-danger text-center' role='alert'>Por favor, ingresa tu usuario y contraseña.</div>";
+    } else {
+        try {
+            // Consulta para verificar las credenciales del usuario
+            // Se usa 'usuario' y 'clave' de la tabla 'usuario_cliente'
+            // NOTA: En un entorno real, la contraseña NUNCA debe almacenarse en texto plano.
+            // Debes usar password_hash() para almacenar y password_verify() para verificar.
+            $stmt = $conn->prepare("SELECT usuario_cliente_id, usuario, clave FROM usuario_cliente WHERE usuario = ?");
+            $stmt->execute([$usuario]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Simulación de verificación de contraseña (reemplazar con password_verify en producción)
+            if ($user && $clave === $user['clave']) { // ¡¡¡ADVERTENCIA: NO SEGURO PARA PRODUCCIÓN!!!
+            // if ($user && password_verify($clave, $user['clave'])) { // Esto sería lo correcto para producción
+                $_SESSION['usuario_cliente_id'] = $user['usuario_cliente_id'];
+                $_SESSION['user_usuario'] = $user['usuario']; // Opcional: guardar el nombre de usuario
+
+                // Redirigir al usuario a la página original o a inicio_Principal.php
+                $redirect_to = isset($_GET['redirect_to']) ? $_GET['redirect_to'] : 'inicio_Principal.php';
+                header('Location: ' . $redirect_to);
+                exit();
+            } else {
+                $login_message = "<div class='alert alert-danger text-center' role='alert'>Usuario o contraseña incorrectos.</div>";
+            }
+        } catch (PDOException $e) {
+            error_log("Error de login: " . $e->getMessage());
+            $login_message = "<div class='alert alert-danger text-center' role='alert'>Error al intentar iniciar sesión. Por favor, inténtalo de nuevo más tarde.</div>";
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Tienda de Electrónica - Estilo Amazon</title>
+    <title>Iniciar Sesión - Mi Tienda de Electrónica</title>
     <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-    <!-- Font Awesome para iconos (opcional, pero útil para un look más completo) -->
+    <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom CSS -->
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #eaeded; /* Light gray background, similar to Amazon */
+            background-color: #eaeded;
             color: #111;
         }
         .navbar-amazon {
-            background-color: #131921; /* Amazon dark blue/black */
+            background-color: #131921;
             padding: 0.5rem 1rem;
             color: white;
         }
@@ -105,7 +121,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             height: 40px;
         }
         .navbar-amazon .search-button {
-            background-color: #febd69; /* Amazon orange */
+            background-color: #febd69;
             border-radius: 0 5px 5px 0;
             border: none;
             color: #111;
@@ -117,7 +133,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             background-color: #f7a847;
         }
         .navbar-amazon .nav-item .dropdown-toggle::after {
-            display: none; /* Hide default caret for Amazon style */
+            display: none;
         }
         .navbar-amazon .nav-item .dropdown-menu {
             background-color: #131921;
@@ -129,10 +145,8 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
         .navbar-amazon .nav-item .dropdown-item:hover {
             background-color: #333;
         }
-
-        /* Secondary Navbar */
         .navbar-secondary {
-            background-color: #232f3e; /* Amazon dark gray */
+            background-color: #232f3e;
             color: white;
             padding: 0.5rem 1rem;
         }
@@ -141,11 +155,9 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             padding: 0.5rem 1rem;
         }
         .navbar-secondary .nav-link:hover {
-            border: 1px solid white; /* Highlight on hover */
+            border: 1px solid white;
             border-radius: 3px;
         }
-
-        /* Offcanvas Menu */
         .offcanvas-header {
             background-color: #232f3e;
             color: white;
@@ -161,65 +173,57 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
         .offcanvas-body .list-group-item:hover {
             background-color: #f0f0f0;
         }
-
-        /* Product Cards */
-        .card {
+        .login-container {
+            background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,.1);
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-            border: 1px solid #ddd;
+            padding: 30px;
+            margin-top: 50px;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
         }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,.15);
-        }
-        .card-img-top {
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            height: 200px;
-            object-fit: contain; /* Use contain to prevent cropping and show full image */
-            padding: 10px; /* Add some padding around the image */
-        }
-        .btn-add-to-cart {
-            background-color: #ffd814; /* Amazon yellow */
-            border-color: #ffd814;
-            color: #111;
-            border-radius: 20px; /* More rounded */
+        .login-container h2 {
+            text-align: center;
+            margin-bottom: 30px;
             font-weight: bold;
-            transition: background-color 0.2s ease-in-out;
+            color: #007bff;
         }
-        .btn-add-to-cart:hover {
-            background-color: #f7ca00;
-            border-color: #f7ca00;
-            color: #111;
-        }
-        .product-price {
-            font-size: 1.4rem;
-            font-weight: bold;
-            color: #b12704; /* Amazon red for price */
-        }
-        .product-brand {
-            font-size: 0.85rem;
-            color: #555;
-        }
-        .out-of-stock-badge {
-            background-color: #dc3545; /* Red for out of stock */
-            color: white;
-            padding: 5px 10px;
+        .login-container .form-control {
             border-radius: 5px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            margin-top: 5px;
-            display: inline-block;
+            padding: 10px;
         }
-
-
-        /* Footer */
+        .login-container .btn-login {
+            background-color: #f0c14b;
+            border-color: #a88734 #9c7e31 #846a29;
+            color: #111;
+            font-weight: bold;
+            border-radius: 5px;
+            padding: 10px 20px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .login-container .btn-login:hover {
+            background-color: #e4b93b;
+        }
+        .login-container .text-center a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .login-container .text-center a:hover {
+            text-decoration: underline;
+        }
+        .section-title {
+            color: #007bff;
+            margin-bottom: 40px;
+            font-weight: 700;
+        }
         .footer-amazon {
-            background-color: #232f3e; /* Dark gray for footer */
+            background-color: #232f3e;
             color: white;
             padding: 40px 0;
             font-size: 0.9rem;
+            margin-top: 50px; /* Adjust margin to push footer down */
         }
         .footer-amazon a {
             color: #ddd;
@@ -231,19 +235,26 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             text-decoration: underline;
             color: white;
         }
-        /* Removed .back-to-top styles as per request */
-
-        /* Custom Toast Notification */
+        .back-to-top {
+            background-color: #37475a;
+            color: white;
+            text-align: center;
+            padding: 15px 0;
+            cursor: pointer;
+        }
+        .back-to-top:hover {
+            background-color: #485769;
+        }
         .custom-toast {
             position: fixed;
             top: 20px;
             right: 20px;
-            background-color: #28a745; /* Green for success */
+            background-color: #28a745;
             color: white;
             padding: 10px 20px;
             border-radius: 5px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 1050; /* Above Bootstrap modals */
+            z-index: 1050;
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
@@ -254,7 +265,10 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
 </head>
 <body>
 
-    <!-- Removed Back to Top Button as per request -->
+    <!-- Back to Top Button -->
+    <div class="back-to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' });">
+        Volver arriba
+    </div>
 
     <!-- Main Navbar (Amazon Style) -->
     <nav class="navbar navbar-expand-lg navbar-amazon sticky-top">
@@ -277,23 +291,17 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item <?php echo $is_logged_in ? 'dropdown' : ''; ?>">
-                        <a class="nav-link <?php echo $is_logged_in ? 'dropdown-toggle' : ''; ?>"
-                           href="<?php echo $is_logged_in ? '#' : 'login.php'; ?>"
-                           id="navbarDropdownAccount"
-                           role="button"
-                           <?php echo $is_logged_in ? 'data-bs-toggle="dropdown" aria-expanded="false"' : ''; ?>>
-                            Hola, <?php echo $user_display_name; ?> <br> <span class="fw-bold">Cuentas y Listas</span>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownAccount" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Hola, identifícate <br> <span class="fw-bold">Cuentas y Listas</span>
                         </a>
-                        <?php if ($is_logged_in): ?>
-                            <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
-                                <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
-                                <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-                                <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
-                                <li><hr class="dropdown-divider bg-secondary"></li>
-                                <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
-                            </ul>
-                        <?php endif; ?>
+                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
+                            <li><a class="dropdown-item" href="#">Mi Cuenta</a></li>
+                            <li><a class="dropdown-item" href="#">Mis Pedidos</a></li>
+                            <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
+                            <li><hr class="dropdown-divider bg-secondary"></li>
+                            <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#">
@@ -352,56 +360,35 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
     <!-- Custom Toast Notification Element -->
     <div id="customToast" class="custom-toast"></div>
 
-    <!-- Main Content -->
-    <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
+    <!-- Main Content for Login -->
+    <main class="container">
+        <div class="login-container">
+            <h2>Iniciar Sesión</h2>
+            <?php echo $login_message; // Muestra mensajes de login ?>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            <?php if (empty($products)): ?>
-                <div class="col-12">
-                    <div class="alert alert-warning text-center" role="alert">
-                        No se encontraron productos.
-                    </div>
+            <form action="login.php<?php echo isset($_GET['redirect_to']) ? '?redirect_to=' . urlencode($_GET['redirect_to']) : ''; ?>" method="POST">
+                <div class="mb-3">
+                    <label for="usuario" class="form-label">Usuario</label>
+                    <input type="text" class="form-control" id="usuario" name="usuario" required>
                 </div>
-            <?php else: ?>
-                <?php foreach ($products as $product): ?>
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?></p>
-                                <div class="mt-auto">
-                                    <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
-                                    <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
-                                    <?php if ($product['stock_quantity'] == 0): ?>
-                                        <span class="out-of-stock-badge">Sin existencias</span>
-                                        <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
-                                            Agotado
-                                        </button>
-                                    <?php else: ?>
-                                        <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
-                                        <form action="agregar_producto.php" method="POST">
-                                            <input type="hidden" name="action" value="add">
-                                            <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['id']); ?>">
-                                            <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
-                                            <button type="submit" class="btn btn-add-to-cart w-100">
-                                                Añadir al Carrito
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+                <div class="mb-3">
+                    <label for="clave" class="form-label">Contraseña</label>
+                    <input type="password" class="form-control" id="clave" name="clave" required>
+                </div>
+                <button type="submit" name="login" class="btn btn-login">Iniciar Sesión</button>
+            </form>
+            <div class="text-center mt-3">
+                <p>¿No tienes una cuenta? <a href="#">Regístrate aquí</a></p>
+                <p><a href="#">¿Olvidaste tu contraseña?</a></p>
+            </div>
         </div>
     </main>
 
     <!-- Footer -->
     <footer class="footer-amazon">
-        <!-- Removed Back to Top Button HTML as per request -->
+        <div class="back-to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' });">
+            Volver arriba
+        </div>
         <div class="container py-4">
             <div class="row">
                 <div class="col-md-3 mb-3">
@@ -446,22 +433,15 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
     <!-- Custom JavaScript -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the message from PHP (if any) and display toast
-            // The $message variable is not passed from carritocompras.php to this page directly on reload
-            // If you want toast messages from adding to cart, you'd need AJAX for the form submission.
-            const customToast = document.getElementById('customToast');
-
-            function showToast(message) {
-                if (message) {
-                    customToast.textContent = message;
-                    customToast.classList.add('show');
-                    setTimeout(() => {
-                        customToast.classList.remove('show');
-                    }, 3000); // Hide after 3 seconds
+            // Back to Top button functionality
+            const backToTopButton = document.querySelector('.back-to-top');
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 200) {
+                    backToTopButton.style.display = 'block';
+                } else {
+                    backToTopButton.style.display = 'none';
                 }
-            }
-
-            // Removed Back to Top button functionality as per request
+            });
         });
     </script>
 </body>

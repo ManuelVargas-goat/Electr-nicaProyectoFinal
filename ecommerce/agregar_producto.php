@@ -2,8 +2,6 @@
 session_start(); // Inicia la sesión para acceder al carrito
 
 // --- Configuración de la Base de Datos PostgreSQL ---
-// ¡IMPORTANTE! Estos valores han sido actualizados con tu configuración.
-// Asegúrate de que tu servidor PostgreSQL esté en ejecución y accesible en este puerto.
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'TiendaElectro');
 define('DB_USER', 'juan');
@@ -12,39 +10,64 @@ define('DB_PORT', '5432'); // Puerto de PostgreSQL
 
 $conn = null;
 try {
-    // Establecer conexión a la base de datos usando PDO
-    // Se incluye el puerto en la cadena de conexión
     $conn = new PDO("pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME, DB_USER, DB_PASSWORD);
-    // Establecer el modo de error de PDO a excepción para una mejor depuración
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Opcional: Establecer el juego de caracteres a UTF-8
     $conn->exec("SET NAMES 'UTF8'");
 } catch (PDOException $e) {
-    // En un entorno de producción, es mejor registrar el error detallado (error_log)
-    // y mostrar un mensaje genérico al usuario por seguridad.
-    error_log("Error de conexión a la base de datos: " . $e->getMessage()); // Esto guarda el error en los logs del servidor
-    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde."); // Mensaje para el usuario
+    error_log("Error de conexión a la base de datos en agregar_producto.php: " . $e->getMessage());
+    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
 }
 
-// --- Obtener productos de la base de datos (con stock) ---
-$products = [];
-try {
-    $stmt = $conn->query("SELECT p.producto_id as id, p.nombre, p.precio, p.marca, p.descripcion, p.ruta_imagen, p.categoria_id, COALESCE(s.cantidad, 0) as stock_quantity FROM producto p LEFT JOIN stock s ON p.producto_id = s.producto_id WHERE p.descontinuado = FALSE ORDER BY p.nombre ASC");
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    error_log("Error al obtener productos: " . $e->getMessage());
-    // Si hay un error al obtener productos, la página se mostrará sin ellos.
-    $products = [];
-}
+$product = null;
+$stock_quantity = 0;
+$message = ''; // Mensaje para notificaciones o alertas
 
-// --- Obtener categorías de la base de datos ---
+// --- Obtener categorías de la base de datos (AÑADIDO PARA RESOLVER EL ERROR) ---
 $categories = [];
 try {
     $stmt = $conn->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre ASC");
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("Error al obtener categorías: " . $e->getMessage());
-    $categories = [];
+    error_log("Error al obtener categorías en agregar_producto.php: " . $e->getMessage());
+    $categories = []; // Asegura que $categories sea un array vacío si hay un error
+}
+
+
+// Obtener el ID del producto de la URL (GET) o del formulario (POST)
+$product_id = isset($_REQUEST['product_id']) ? intval($_REQUEST['product_id']) : 0;
+
+if ($product_id > 0) {
+    try {
+        // Obtener detalles del producto
+        $stmt_product = $conn->prepare("SELECT producto_id as id, nombre, precio, marca, descripcion, ruta_imagen FROM producto WHERE producto_id = ? AND descontinuado = FALSE");
+        $stmt_product->execute([$product_id]);
+        $product = $stmt_product->fetch(PDO::FETCH_ASSOC);
+
+        if ($product) {
+            // Obtener stock del producto
+            $stmt_stock = $conn->prepare("SELECT cantidad FROM stock WHERE producto_id = ?");
+            $stmt_stock->execute([$product_id]);
+            $stock_data = $stmt_stock->fetch(PDO::FETCH_ASSOC);
+            $stock_quantity = $stock_data ? $stock_data['cantidad'] : 0;
+
+            // Definir un umbral para stock bajo
+            $low_stock_threshold = 10;
+            if ($stock_quantity <= $low_stock_threshold && $stock_quantity > 0) {
+                $message = "<div class='alert alert-warning text-center' role='alert'><i class='fas fa-exclamation-triangle me-2'></i> ¡Atención! Quedan pocas unidades en stock ($stock_quantity).</div>";
+            } elseif ($stock_quantity == 0) {
+                $message = "<div class='alert alert-danger text-center' role='alert'><i class='fas fa-times-circle me-2'></i> ¡Producto agotado!</div>";
+            }
+
+        } else {
+            $message = "<div class='alert alert-danger text-center' role='alert'>Producto no encontrado o descontinuado.</div>";
+        }
+
+    } catch (PDOException $e) {
+        error_log("Error al obtener detalles del producto o stock: " . $e->getMessage());
+        $message = "<div class='alert alert-danger text-center' role='alert'>Error al cargar los detalles del producto.</div>";
+    }
+} else {
+    $message = "<div class='alert alert-danger text-center' role='alert'>ID de producto no especificado.</div>";
 }
 
 // Calcular el número de ítems en el carrito para mostrar en la barra de navegación
@@ -54,20 +77,16 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
         $cart_item_count += $item['quantity'];
     }
 }
-
-// Verificar si el usuario está logeado para personalizar la navegación
-$is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
-$user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate'; // Asume 'user_usuario' se establece en login.php
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Tienda de Electrónica - Estilo Amazon</title>
+    <title><?php echo $product ? htmlspecialchars($product['nombre']) : 'Producto No Encontrado'; ?> - Mi Tienda</title>
     <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-    <!-- Font Awesome para iconos (opcional, pero útil para un look más completo) -->
+    <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom CSS -->
     <style>
@@ -162,57 +181,85 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             background-color: #f0f0f0;
         }
 
-        /* Product Cards */
-        .card {
+        /* Product Detail Specific Styles */
+        .product-detail-card {
+            background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,.1);
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-            border: 1px solid #ddd;
+            padding: 30px;
+            margin-top: 30px;
         }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,.15);
+        .product-detail-img {
+            max-width: 100%;
+            height: auto;
+            object-fit: contain;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 10px;
         }
-        .card-img-top {
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            height: 200px;
-            object-fit: contain; /* Use contain to prevent cropping and show full image */
-            padding: 10px; /* Add some padding around the image */
+        .product-title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
-        .btn-add-to-cart {
+        .product-brand {
+            font-size: 1.1rem;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .product-price-detail {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #b12704;
+            margin-bottom: 20px;
+        }
+        .product-description {
+            font-size: 1rem;
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+        .quantity-selector {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .quantity-selector label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .quantity-input {
+            width: 80px;
+            text-align: center;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            padding: 8px;
+        }
+        .btn-add-to-cart-detail {
             background-color: #ffd814; /* Amazon yellow */
             border-color: #ffd814;
             color: #111;
-            border-radius: 20px; /* More rounded */
             font-weight: bold;
+            border-radius: 20px;
+            padding: 12px 25px;
+            width: 100%;
             transition: background-color 0.2s ease-in-out;
         }
-        .btn-add-to-cart:hover {
+        .btn-add-to-cart-detail:hover {
             background-color: #f7ca00;
             border-color: #f7ca00;
             color: #111;
         }
-        .product-price {
-            font-size: 1.4rem;
-            font-weight: bold;
-            color: #b12704; /* Amazon red for price */
+        .stock-info {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 10px;
         }
-        .product-brand {
-            font-size: 0.85rem;
-            color: #555;
+        .section-title {
+            color: #007bff;
+            margin-bottom: 40px;
+            font-weight: 700;
         }
-        .out-of-stock-badge {
-            background-color: #dc3545; /* Red for out of stock */
-            color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            margin-top: 5px;
-            display: inline-block;
-        }
-
 
         /* Footer */
         .footer-amazon {
@@ -231,30 +278,24 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             text-decoration: underline;
             color: white;
         }
-        /* Removed .back-to-top styles as per request */
-
-        /* Custom Toast Notification */
-        .custom-toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #28a745; /* Green for success */
+        .back-to-top {
+            background-color: #37475a;
             color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 1050; /* Above Bootstrap modals */
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
+            text-align: center;
+            padding: 15px 0;
+            cursor: pointer;
         }
-        .custom-toast.show {
-            opacity: 1;
+        .back-to-top:hover {
+            background-color: #485769;
         }
     </style>
 </head>
 <body>
 
-    <!-- Removed Back to Top Button as per request -->
+    <!-- Back to Top Button (hidden by default, appears on scroll) -->
+    <div class="back-to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' });">
+        Volver arriba
+    </div>
 
     <!-- Main Navbar (Amazon Style) -->
     <nav class="navbar navbar-expand-lg navbar-amazon sticky-top">
@@ -277,23 +318,17 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item <?php echo $is_logged_in ? 'dropdown' : ''; ?>">
-                        <a class="nav-link <?php echo $is_logged_in ? 'dropdown-toggle' : ''; ?>"
-                           href="<?php echo $is_logged_in ? '#' : 'login.php'; ?>"
-                           id="navbarDropdownAccount"
-                           role="button"
-                           <?php echo $is_logged_in ? 'data-bs-toggle="dropdown" aria-expanded="false"' : ''; ?>>
-                            Hola, <?php echo $user_display_name; ?> <br> <span class="fw-bold">Cuentas y Listas</span>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownAccount" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Hola, identifícate <br> <span class="fw-bold">Cuentas y Listas</span>
                         </a>
-                        <?php if ($is_logged_in): ?>
-                            <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
-                                <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
-                                <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-                                <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
-                                <li><hr class="dropdown-divider bg-secondary"></li>
-                                <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
-                            </ul>
-                        <?php endif; ?>
+                        <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
+                            <li><a class="dropdown-item" href="#">Mi Cuenta</a></li>
+                            <li><a class="dropdown-item" href="#">Mis Pedidos</a></li>
+                            <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
+                            <li><hr class="dropdown-divider bg-secondary"></li>
+                            <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#">
@@ -349,59 +384,48 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
         </div>
     </div>
 
-    <!-- Custom Toast Notification Element -->
-    <div id="customToast" class="custom-toast"></div>
-
-    <!-- Main Content -->
+    <!-- Main Content for Product Detail -->
     <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
+        <?php echo $message; // Muestra mensajes de error o stock bajo ?>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            <?php if (empty($products)): ?>
-                <div class="col-12">
-                    <div class="alert alert-warning text-center" role="alert">
-                        No se encontraron productos.
-                    </div>
+        <?php if ($product): ?>
+            <div class="row product-detail-card">
+                <div class="col-md-5">
+                    <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="product-detail-img" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/600x400/F0F0F0/333?text=Imagen+No+Disponible';">
                 </div>
-            <?php else: ?>
-                <?php foreach ($products as $product): ?>
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?></p>
-                                <div class="mt-auto">
-                                    <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
-                                    <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
-                                    <?php if ($product['stock_quantity'] == 0): ?>
-                                        <span class="out-of-stock-badge">Sin existencias</span>
-                                        <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
-                                            Agotado
-                                        </button>
-                                    <?php else: ?>
-                                        <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
-                                        <form action="agregar_producto.php" method="POST">
-                                            <input type="hidden" name="action" value="add">
-                                            <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['id']); ?>">
-                                            <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
-                                            <button type="submit" class="btn btn-add-to-cart w-100">
-                                                Añadir al Carrito
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
+                <div class="col-md-7">
+                    <h1 class="product-title"><?php echo htmlspecialchars($product['nombre']); ?></h1>
+                    <p class="product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
+                    <p class="product-price-detail">S/ <?php echo number_format($product['precio'], 2); ?></p>
+                    <p class="product-description"><?php echo htmlspecialchars($product['descripcion']); ?></p>
+
+                    <div class="stock-info">
+                        Stock disponible: <?php echo $stock_quantity; ?> unidades
                     </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
+
+                    <form action="carritocompras.php" method="POST" class="mt-4">
+                        <input type="hidden" name="action" value="add">
+                        <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['id']); ?>">
+
+                        <div class="quantity-selector">
+                            <label for="quantity">Cantidad:</label>
+                            <input type="number" id="quantity" name="quantity" value="1" min="1" max="<?php echo $stock_quantity > 0 ? $stock_quantity : 1; ?>" class="form-control quantity-input">
+                        </div>
+
+                        <button type="submit" class="btn btn-add-to-cart-detail" <?php echo ($stock_quantity == 0) ? 'disabled' : ''; ?>>
+                            <?php echo ($stock_quantity == 0) ? 'Agotado' : 'Añadir al Carrito'; ?>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
     </main>
 
     <!-- Footer -->
     <footer class="footer-amazon">
-        <!-- Removed Back to Top Button HTML as per request -->
+        <div class="back-to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' });">
+            Volver arriba
+        </div>
         <div class="container py-4">
             <div class="row">
                 <div class="col-md-3 mb-3">
@@ -446,22 +470,15 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
     <!-- Custom JavaScript -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the message from PHP (if any) and display toast
-            // The $message variable is not passed from carritocompras.php to this page directly on reload
-            // If you want toast messages from adding to cart, you'd need AJAX for the form submission.
-            const customToast = document.getElementById('customToast');
-
-            function showToast(message) {
-                if (message) {
-                    customToast.textContent = message;
-                    customToast.classList.add('show');
-                    setTimeout(() => {
-                        customToast.classList.remove('show');
-                    }, 3000); // Hide after 3 seconds
+            // Back to Top button functionality
+            const backToTopButton = document.querySelector('.back-to-top');
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 200) {
+                    backToTopButton.style.display = 'block';
+                } else {
+                    backToTopButton.style.display = 'none';
                 }
-            }
-
-            // Removed Back to Top button functionality as per request
+            });
         });
     </script>
 </body>

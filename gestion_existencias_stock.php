@@ -27,14 +27,14 @@ try {
     $stmt_categorias = $pdo->query($sql_categorias);
     $categorias = $stmt_categorias->fetchAll(PDO::FETCH_COLUMN, 0);
 } catch (PDOException $e) {
-    error_log("Error al cargar categorías: " . $e->getMessage());
+    error_log("Error al cargar categorías en gestion_existencias_stock.php: " . $e->getMessage());
     $categorias = []; // Asegura que $categorias sea un array vacío si falla
 }
 
 
 // Filtro por nombre o categoría
 $filtroNombre = $_GET['nombre'] ?? '';
-$filtroCategoria = $_GET['categoria'] ?? ''; // Ahora vendrá del <select>
+$filtroCategoria = $_GET['categoria'] ?? '';
 
 $where = [];
 $params = [];
@@ -43,54 +43,26 @@ if (!empty($filtroNombre)) {
     $where[] = "p.nombre ILIKE :nombre";
     $params[':nombre'] = "%$filtroNombre%";
 }
-// La diferencia aquí: si filtroCategoria NO está vacío (es decir, se seleccionó algo)
-// se añade a la cláusula WHERE. Si está vacío o es la opción por defecto, no filtra por categoría.
 if (!empty($filtroCategoria)) {
-    $where[] = "c.nombre = :categoria"; // Usamos '=' en lugar de ILIKE para una selección exacta
+    $where[] = "c.nombre = :categoria";
     $params[':categoria'] = $filtroCategoria;
 }
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// --- NUEVA CONSULTA SQL para obtener el stock directamente de la tabla 'stock' ---
+// Esta consulta asume que la tabla 'stock' es la fuente de verdad para la cantidad actual.
+// Los triggers en la base de datos son responsables de mantener 'stock.cantidad' y 'stock.fecha_ultima_entrada' actualizados.
 $sql = "
 SELECT p.producto_id,
         p.nombre,
         p.marca,
         c.nombre AS categoria,
-        (
-           -- ENTRADAS
-           COALESCE((
-            SELECT SUM(dp.cantidad)
-            FROM detalle_pedido dp
-            JOIN pedido ped ON ped.pedido_id = dp.pedido_id
-            WHERE dp.producto_id = p.producto_id AND ped.estado = 'entregado'
-           ), 0)
-           +
-           COALESCE((
-            SELECT SUM(dd.cantidad)
-            FROM detalle_devolucion dd
-            JOIN devolucion dv ON dv.devolucion_id = dd.devolucion_id
-            WHERE dd.producto_id = p.producto_id AND dv.tipo = 'cliente' AND dd.reingresado_stock IS TRUE
-           ), 0)
-           -- SALIDAS
-           -
-           COALESCE((
-            SELECT SUM(dc.cantidad)
-            FROM detalle_compra dc
-            JOIN compra co ON dc.compra_id = co.compra_id
-            JOIN estado es ON co.estado_id = es.estado_id
-            WHERE dc.producto_id = p.producto_id AND es.nombre = 'confirmado'
-           ), 0)
-           -
-           COALESCE((
-            SELECT SUM(dd2.cantidad)
-            FROM detalle_devolucion dd2
-            JOIN devolucion dv2 ON dv2.devolucion_id = dd2.devolucion_id
-            WHERE dd2.producto_id = p.producto_id AND dv2.tipo = 'proveedor'
-           ), 0)
-        ) AS stock_disponible
+        s.cantidad AS stock_disponible, -- Obtenemos el stock directamente de la tabla 'stock'
+        s.fecha_ultima_entrada          -- Columna incluida para evitar el 'Undefined array key'
 FROM producto p
 LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
+JOIN stock s ON p.producto_id = s.producto_id -- Unimos con la tabla stock para obtener la cantidad
 $whereClause
 ORDER BY p.producto_id DESC
 ";
@@ -310,6 +282,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <th>Marca</th>
                             <th>Categoría</th>
                             <th>Stock Disponible</th>
+                            <th>Última Actualización</th> <!-- Columna descomentada -->
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -324,6 +297,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                     <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
                                         <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : htmlspecialchars($producto['stock_disponible']) ?>
                                     </td>
+                                    <td><?= htmlspecialchars($producto['fecha_ultima_entrada'] ? date('Y-m-d H:i', strtotime($producto['fecha_ultima_entrada'])) : 'N/A') ?></td> <!-- Columna descomentada -->
                                     <td>
                                         <a href="detalle_stock.php?producto_id=<?= htmlspecialchars($producto['producto_id']) ?>" class="btn btn-sm btn-info">Ver detalles</a>
                                     </td>
@@ -331,7 +305,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="6" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
+                                <td colspan="7" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -368,16 +342,16 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
         // Abre el submenú de existencias si alguna de sus sub-páginas está activa
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
-             existenciasSubmenu.classList.add('active');
+            existenciasSubmenu.classList.add('active');
         }
 
         if (existenciasToggle) {
-             existenciasToggle.addEventListener('click', function(e) {
-                 e.preventDefault();
-                 if (existenciasSubmenu) {
-                     existenciasSubmenu.classList.toggle('active');
-                 }
-             });
+            existenciasToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (existenciasSubmenu) {
+                    existenciasSubmenu.classList.toggle('active');
+                }
+            });
         }
 
         // --- Lógica: Botón Limpiar Filtros ---

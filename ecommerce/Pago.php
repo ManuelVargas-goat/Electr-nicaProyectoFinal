@@ -1,374 +1,107 @@
 <?php
-include("config.php");
+// Incluye el archivo de configuración que contiene la conexión PDO y el inicio de sesión
+require_once 'config.php';
 
-if (!isset($_SESSION['usuario'])) {
-    header('Location: UserLogin.php');
+// Asegúrate de que la sesión esté iniciada y que 'carrito' exista
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verifica si el carrito está vacío o no existe
+if (!isset($_SESSION['carrito']) || empty($_SESSION['carrito'])) {
+    // Redirige al carrito de compras si no hay productos
+    header('Location: carrocompras.php');
     exit();
 }
 
-$usuario = $_SESSION['usuario'];
+// Inicia una transacción para asegurar la integridad de los datos
+$pdo->beginTransaction();
 
-$sql = "SELECT usuario_cliente_id FROM usuario_cliente WHERE usuario = :usuario";
-$stmt = $pdo->prepare($sql);
-$stmt->execute([':usuario' => $usuario]);
-$cliente = $stmt->fetch();
+try {
+    $total_compra = 0; // Inicializa el total de la compra
 
-if (!$cliente) {
-    die("Cliente no encontrado.");
-} else {
-    $usuarioclienteId = $cliente['usuario_cliente_id'];
-}
-
-$productoSeleccionados = isset($_SESSION['carrito']['productoSeleccionados']) ? $_SESSION['carrito']['productoSeleccionados'] : null;
-
-if ($productoSeleccionados != null) {
-} else {
-    header("Location: Inicio_Principal.php");
-    exit;
-}
-
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['RealizarPedido'])) {
-    $conteo = 0;
-
-    if (is_array($productoSeleccionados)) {
-        foreach ($productoSeleccionados as $elemento) {
-            if (is_array($elemento)) {
-                $conteo++;
-            }
+    // Paso 1: Verificar el stock de cada producto en el carrito
+    foreach ($_SESSION['carrito'] as $producto_id => $cantidad_solicitada) {
+        // Asegúrate de que $producto_id y $cantidad_solicitada sean valores válidos
+        if (!is_numeric($producto_id) || !is_numeric($cantidad_solicitada) || $cantidad_solicitada <= 0) {
+            throw new Exception("Datos de producto o cantidad no válidos en el carrito.");
         }
+
+        // Consulta para obtener el precio y el stock actual del producto
+        // Es crucial que 'st.cantidad' se use para el stock, no 'pr.stock'
+        $stmt_producto = $pdo->prepare("SELECT pr.precio, st.cantidad AS stock FROM producto pr INNER JOIN stock st ON pr.producto_id = st.producto_id WHERE pr.producto_id = :producto_id AND pr.descontinuado = FALSE");
+        $stmt_producto->bindParam(':producto_id', $producto_id, PDO::PARAM_INT);
+        $stmt_producto->execute();
+        $producto = $stmt_producto->fetch(PDO::FETCH_ASSOC);
+
+        // Verifica si el producto existe y tiene stock suficiente
+        if (!$producto) {
+            throw new Exception("Error al verificar el producto ID: " . htmlspecialchars($producto_id) . ". El producto no existe o está descontinuado.");
+        }
+        if ($producto['stock'] < $cantidad_solicitada) {
+            throw new Exception("Stock insuficiente para el producto ID: " . htmlspecialchars($producto_id) . ". Stock disponible: " . htmlspecialchars($producto['stock']) . ", solicitado: " . htmlspecialchars($cantidad_solicitada) . ".");
+        }
+
+        // Calcula el subtotal para este producto y lo añade al total de la compra
+        $total_compra += $producto['precio'] * $cantidad_solicitada;
     }
 
-    if ($conteo) {
-        $pdo->beginTransaction();
+    // Paso 2: Insertar la compra en la tabla 'compra'
+    // Asegúrate de que la columna 'total_compra' exista en tu tabla 'compra'
+    // y que 'usuario_cliente_id' sea el ID del usuario logueado.
+    // Si no tienes un sistema de usuarios, puedes usar un ID de usuario por defecto o anónimo.
+    $usuario_cliente_id = isset($_SESSION['usuario_id']) ? $_SESSION['usuario_id'] : 1; // Usar 1 como ID por defecto si no hay sesión de usuario
+    $fecha_compra = date('Y-m-d H:i:s'); // Fecha y hora actual
 
-        try {
-            // USAR NOW() en lugar de CURRENT_DATE
-            $stmt = $pdo->prepare("INSERT INTO compra (usuario_cliente_id,fecha_compra, estado_id, almacen_id)
-                                   VALUES (:usuario_id, NOW(), '1','1') RETURNING compra_id");
-            $stmt->execute([':usuario_id' => $usuarioclienteId]);
-            $compraId = $stmt->fetchColumn();
+    $stmt_compra = $pdo->prepare("INSERT INTO compra (usuario_cliente_id, fecha_compra, total_compra) VALUES (:usuario_cliente_id, :fecha_compra, :total_compra) RETURNING compra_id");
+    $stmt_compra->bindParam(':usuario_cliente_id', $usuario_cliente_id, PDO::PARAM_INT);
+    $stmt_compra->bindParam(':fecha_compra', $fecha_compra);
+    $stmt_compra->bindParam(':total_compra', $total_compra);
+    $stmt_compra->execute();
+    $compra_id = $stmt_compra->fetchColumn(); // Obtiene el ID de la compra recién insertada
 
-            $stmt = $pdo->prepare("INSERT INTO detalle_compra
-                (compra_id, producto_id, proveedor_id, cantidad, precio_unitario)
-                VALUES (:compra_id, :producto_id, '1', :cantidad, :precio)");
+    // Paso 3: Insertar los detalles de la compra en 'detalle_compra' y actualizar el stock
+    foreach ($_SESSION['carrito'] as $producto_id => $cantidad_solicitada) {
+        // Obtener el precio actual del producto (ya verificado en el paso 1)
+        $stmt_precio = $pdo->prepare("SELECT precio FROM producto WHERE producto_id = :producto_id");
+        $stmt_precio->bindParam(':producto_id', $producto_id, PDO::PARAM_INT);
+        $stmt_precio->execute();
+        $precio_unitario = $stmt_precio->fetchColumn();
 
-            foreach ($productoSeleccionados as $producto) {
+        // Insertar en detalle_compra
+        $stmt_detalle = $pdo->prepare("INSERT INTO detalle_compra (compra_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (:compra_id, :producto_id, :cantidad, :precio_unitario, :subtotal)");
+        $subtotal_producto = $cantidad_solicitada * $precio_unitario;
+        $stmt_detalle->bindParam(':compra_id', $compra_id, PDO::PARAM_INT);
+        $stmt_detalle->bindParam(':producto_id', $producto_id, PDO::PARAM_INT);
+        $stmt_detalle->bindParam(':cantidad', $cantidad_solicitada, PDO::PARAM_INT);
+        $stmt_detalle->bindParam(':precio_unitario', $precio_unitario);
+        $stmt_detalle->bindParam(':subtotal', $subtotal_producto);
+        $stmt_detalle->execute();
 
-                $_id = $producto['id'];
-                $precio = $producto['precio'];
-                $cantidad = $producto['cantidad'];
-
-                $stmt->execute([
-                    ':compra_id' => $compraId,
-                    ':producto_id' => $_id,
-                    ':cantidad' => $cantidad,
-                    ':precio' => $precio
-                ]);
-            }
-            
-            $_SESSION['carrito']['productos'] = [];
-       
-            $pdo->commit();
-            header("Location: Pago_aprobado.php");
-            exit();
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            die("Error al registrar pedido: " . $e->getMessage());
-        }
+        // Actualizar el stock del producto
+        $stmt_update_stock = $pdo->prepare("UPDATE stock SET cantidad = cantidad - :cantidad WHERE producto_id = :producto_id");
+        $stmt_update_stock->bindParam(':cantidad', $cantidad_solicitada, PDO::PARAM_INT);
+        $stmt_update_stock->bindParam(':producto_id', $producto_id, PDO::PARAM_INT);
+        $stmt_update_stock->execute();
     }
 
+    // Si todo fue exitoso, confirma la transacción
+    $pdo->commit();
 
-} 
+    // Limpia el carrito después de una compra exitosa
+    unset($_SESSION['carrito']);
+    $_SESSION['num_cart'] = 0; // Reinicia el contador del carrito
+
+    // Redirige a una página de confirmación o al inicio
+    header('Location: compra_exitosa.php');
+    exit();
+
+} catch (Exception $e) {
+    // Si algo falla, revierte la transacción
+    $pdo->rollBack();
+    error_log("Error al procesar la compra: " . $e->getMessage()); // Registra el error en el log
+    $_SESSION['error_compra'] = "Error al procesar la compra: Problemas con el stock o disponibilidad de productos: " . $e->getMessage();
+    header('Location: carrocompras.php'); // Redirige de nuevo al carrito con un mensaje de error
+    exit();
+}
 ?>
-
-
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Tienda Informatica</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
-
-    <link rel="stylesheet" href="css/index.css">
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
-        integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
-</head>
-
-<body>
-    <div class="wrapper">
-        <!-- Nav Bar Redes-->
-<nav class="navbar navbar-expand-lg bg-dark navbar-light d-none d-lg-block" id="templatemo_nav_top">
-    <div class="container text-light">
-        <div class="w-100 d-flex justify-content-between">
-            <div>
-                <i class="fa fa-envelope mx-2"></i>
-                <a class="navbar-sm-brand text-light text-decoration-none"
-                    href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
-                <i class="fa fa-phone mx-2"></i>
-                <a class="navbar-sm-brand text-light text-decoration-none" href="tel:010-020-0340">984 854 555</a>
-            </div>
-            <div>
-                <a class="text-light" href="https://fb.com/templatemo" target="_blank" rel="sponsored"><i
-                        class="fab fa-facebook-f fa-sm fa-fw me-2"></i></a>
-                <a class="text-light" href="https://www.instagram.com/" target="_blank"><i
-                        class="fab fa-instagram fa-sm fa-fw me-2"></i></a>
-                <a class="text-light" href="https://twitter.com/" target="_blank"><i
-                        class="fab fa-twitter fa-sm fa-fw me-2"></i></a>
-            </div>
-        </div>
-    </div>
-</nav>
-<!-- Nav Bar Redes-->
-
-<!-- Header -->
-<header>
-
-    <div class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container d-flex justify-content-between align-items-center">
-
-            <a href="Inicio_Principal.php" class="navbar-brand">
-                <strong>Tienda Electronica</strong>
-            </a>
-
-            <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET"
-                style="max-width: 600px;">
-                <input type="text" name="buscar" class="form-control" placeholder="Buscar...">
-                <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
-            </form>
-
-            <div class="d-flex gap-2">
-                <a href="UserLogin.php" class="btn btn-warning"><i class="fa-solid fa-user"></i> Usuario </a>
-                <a href="carrocompras.php" class="btn btn-primary position-relative">
-                    <i class="fa-solid fa-cart-shopping"></i> Carrito
-                    <span id="num_cart"
-                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                        <?php echo $num_cart; ?>
-                    </span>
-                </a>
-            </div>
-
-
-        </div>
-
-    </div>
-
-</header>
-
-<!-- Fin Header -->
-
-
-        <div class="content">
-            <div class="container">
-                <br><br>
-
-                <div class="table-responsive">
-                    <table class="table" style="text-align: center;">
-                        <thead>
-                            <tr>
-                                <th>Imagen</th>
-                                <th>Producto</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($productoSeleccionados)) {
-                                echo '<tr><td colspan="5" class="text-center"><b>Lista vacia</b></td></tr>';
-                            } else {
-                                $total = 0;
-                                foreach ($productoSeleccionados as $producto) {
-
-                                    $_id = $producto['id'];
-                                    $nombre = $producto['nombre'];
-                                    $precio = $producto['precio'];
-                                    $cantidad = $producto['cantidad'];
-                                    $subtotal = $producto['subtotal'];
-                                    $total += $subtotal;
-                                    ?>
-                                    <tr id="info_productos">
-                                        <td style="display: none;"><?php echo $_id; ?></td>
-
-                                        <td> <a href="Producto.php?id=<?php echo $_id; ?>">
-                                                <img class="icontable" style="width: 100px; height: auto;"
-                                                    src="imgs/<?= $nombre; ?>.png" alt="Imagen de <?php echo $nombre; ?>">
-                                            </a></td>
-
-                                        <td><?php echo $nombre; ?></td>
-
-                                        <td style="display: none;"><?php echo $precio; ?></td>
-
-                                        <td>
-                                            <div id="subtotal_<?php echo $_id; ?>" name="subtotal[]">
-                                                <?php echo 'S/.' . number_format($subtotal, 2, '.', ','); ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php } ?>
-
-                                <tr>
-                                    <td colspan="4">
-                                        <p class="h3 text-end" id="total" name="name">
-                                            <?php echo 'S/.' . number_format($total, 2, '.', ','); ?>
-                                        </p>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        <?php } ?>
-                    </table>
-                </div>
-
-                <form id="form_RealizarPedido" method="POST">
-                    <input type="hidden" name="RealizarPedido" id="RealizarPedido" value="9" />
-
-                    <button type="submit" class="btn btn-primary">Realizar Compra</button>
-
-                </form>
-            </div>
-
-
-
-            <br><br>
-
-
-            <script>
-
-                function EnviarProductos() {
-
-                    const filas = document.querySelectorAll('#info_productos')
-                    const productos = []
-
-                    filas.forEach(function (tr) {
-                        const celdas = tr.querySelectorAll('td')
-
-                        // Extrae los datos de las celdas, ajusta según tu estructura
-                        const id = celdas[0].innerText.trim() // ID oculto en la primera columna
-                        const nombre = celdas[2].innerText.trim() // Producto
-                        const precio = celdas[3].innerText.trim() // Precio
-                        const cantidad = celdas[4].innerText.trim() // Cantidad
-
-                        console.log(productos)
-
-                        productos.push({
-                            id: id,
-                            nombre: nombre,
-                            precio: precio,
-                            cantidad: cantidad
-                        });
-                    });
-
-
-                    // Convertir a JSON
-                    const productosJSON = JSON.stringify(productos)
-
-                    // Asignar al input oculto
-                    document.getElementById('productos_json').value = productosJSON
-
-                    // Enviar el formulario
-                    document.getElementById('form_productos').submit()
-                }
-
-
-            </script>
-
-
-
-
-        </div>
-
-    </div>
-
-    <!-- Start Footer -->
-    <footer class="bg-dark" id="footer">
-        <div class="container">
-            <div class="row">
-
-                <div class="col-md-4 pt-5">
-                    <h2 class="h2 text-success border-bottom pb-3 border-light logo">Tienda electronica</h2>
-                    <ul class="list-unstyled text-light footer-link-list">
-                        <li>
-                            <i class="fa-regular fa-clock fa-fw"></i>
-                            Lunes a viernes de 1:45 p.m. a 6:15 p.m. y los domingos de 7:00 a.m. a 2:00 p.m.
-                        </li>
-                        <li>
-                            <i class="fas fa-map-marker-alt fa-fw"></i>
-                            Avenida Salaverry 301, Vallecito, Arequipa
-                        </li>
-                        <li>
-                            <i class="fa-brands fa-whatsapp fa-fw"></i>
-                            <a class="text-decoration-none" href="tel:010-020-0340">984 854 555</a>
-                        </li>
-                        <li>
-                            <i class="fa fa-envelope fa-fw"></i>
-                            <a class="text-decoration-none"
-                                href="mailto:info@company.com">ExperienciasFormativas@isur.edu.pe</a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="col-md-4 pt-5">
-
-                    <ul class="list-unstyled text-light footer-link-list">
-
-                    </ul>
-                </div>
-
-                <div class="col-md-4 pt-5">
-                    <h2 class="h2 text-light border-bottom pb-3 border-light">Contacto</h2>
-                    <ul class="list-unstyled text-light footer-link-list">
-                        <li><a class="text-decoration-none" href="#">Home</a></li>
-                        <li><a class="text-decoration-none" href="#">About Us</a></li>
-                        <li><a class="text-decoration-none" href="#">FAQs</a></li>
-                        <li><a class="text-decoration-none" href="#">Contact</a></li>
-                    </ul>
-                </div>
-
-            </div>
-
-            <div class="row text-light mb-4">
-                <div class="col-12 mb-3">
-                    <div class="w-100 my-3 border-top border-light"></div>
-                </div>
-                <div class="col-auto me-auto">
-                    <ul class="list-inline text-left footer-icons">
-                        <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="http://facebook.com/"><i
-                                    class="fab fa-facebook-f fa-lg fa-fw"></i></a>
-                        </li>
-                        <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank"
-                                href="https://www.instagram.com/"><i class="fab fa-instagram fa-lg fa-fw"></i></a>
-                        </li>
-                        <li class="list-inline-item border border-light rounded-circle text-center">
-                            <a class="text-light text-decoration-none" target="_blank" href="https://twitter.com/"><i
-                                    class="fab fa-twitter fa-lg fa-fw"></i></a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div class="w-100 bg-black py-3">
-            <div class="container">
-                <div class="row pt-2">
-                    <div class="col-12">
-                        <p class="text-left text-light">
-                            Copyright &copy; 2025 ISUR
-
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </footer>
-    <!-- End Footer -->
-    <div>
-</body>
-
-</html>

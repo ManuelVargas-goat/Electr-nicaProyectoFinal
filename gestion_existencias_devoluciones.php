@@ -4,7 +4,7 @@ include("config.php"); // Asegúrate de que 'config.php' contenga la conexión P
 
 // --- Constantes ---
 define('PEDIDO_ESTADO_ENTREGADO', 'entregado'); // No usado directamente aquí, pero útil para consistencia
-define('PEDIDO_ESTIDO_CANCELADO', 'cancelado'); // No usado directamente aquí
+define('PEDIDO_ESTADO_CANCELADO', 'cancelado'); // Corregido typo: PEDIDO_ESTIDO_CANCELADO -> PEDIDO_ESTADO_CANCELADO
 define('PEDIDO_ESTADO_PENDIENTE', 'pendiente'); // No usado directamente aquí
 
 define('ALERT_SUCCESS', 'success');
@@ -51,12 +51,76 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     $tipoMensaje = $_GET['tipo'] ?? 'info';
 }
 
-// --- Generar token CSRF para el formulario (si es necesario para futuras acciones POST) ---
-// Aunque este archivo no tiene un POST directo para acciones, es buena práctica si se añade alguna.
+// --- Generar token CSRF para el formulario ---
+// Este token se usará para proteger cualquier acción POST que se realice en esta página
+// o que redirija a esta página después de una acción.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrf_token = $_SESSION['csrf_token'];
+
+// --- Lógica para PROCESAR DEVOLUCIONES (Afectar Stock) ---
+// Este bloque se ejecutará si se recibe una solicitud POST, por ejemplo,
+// desde un formulario en 'nueva_devolucion.php' o 'editar_devolucion.php'
+// que redirige aquí después de procesar.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'procesar_devolucion') {
+    // 1. Verificación CSRF
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $csrf_token) {
+        $_SESSION['modal_message'] = "Error de seguridad: Solicitud no válida (CSRF). Intente nuevamente.";
+        $_SESSION['modal_type'] = ALERT_DANGER;
+        header("Location: gestion_existencias_devoluciones.php");
+        exit();
+    }
+    // Regenerar el token CSRF después de un uso exitoso para prevenir reenvíos
+    unset($_SESSION['csrf_token']);
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+    // Recopilar y validar datos de la devolución
+    $devolucionId = filter_var($_POST['devolucion_id'] ?? null, FILTER_VALIDATE_INT);
+    $productoId = filter_var($_POST['producto_id'] ?? null, FILTER_VALIDATE_INT);
+    $cantidad = filter_var($_POST['cantidad'] ?? null, FILTER_VALIDATE_INT);
+    $tipoDevolucion = $_POST['tipo_devolucion'] ?? ''; // 'cliente' o 'proveedor'
+    $reingresadoStock = isset($_POST['reingresado_stock']) ? true : false; // Solo para devoluciones de cliente
+
+    // Validar datos mínimos
+    if (!$devolucionId || !$productoId || !$cantidad || $cantidad <= 0 || empty($tipoDevolucion)) {
+        $_SESSION['modal_message'] = "Error: Datos de devolución incompletos o inválidos para procesar stock.";
+        $_SESSION['modal_type'] = ALERT_DANGER;
+        header("Location: gestion_existencias_devoluciones.php");
+        exit();
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        // Lógica para actualizar el stock
+        $stmtUpdateStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad " . ($tipoDevolucion === 'cliente' && $reingresadoStock ? '+' : '-') . " :cantidad, fecha_ultima_entrada = NOW() WHERE producto_id = :producto_id");
+        
+        // Ejecutar la actualización de stock
+        $stmtUpdateStock->execute([
+            ':cantidad' => $cantidad,
+            ':producto_id' => $productoId
+        ]);
+
+        // Opcional: Actualizar el estado de la devolución o el detalle de devolución si es necesario
+        // Por ejemplo, si tienes un campo 'estado_procesado' en 'detalle_devolucion'
+        // $stmtUpdateDetalleDevolucion = $pdo->prepare("UPDATE detalle_devolucion SET procesado = TRUE WHERE devolucion_id = :devolucion_id AND producto_id = :producto_id");
+        // $stmtUpdateDetalleDevolucion->execute([':devolucion_id' => $devolucionId, ':producto_id' => $productoId]);
+
+        $pdo->commit();
+        $_SESSION['modal_message'] = "Stock actualizado para la devolución #" . htmlspecialchars($devolucionId) . ".";
+        $_SESSION['modal_type'] = ALERT_SUCCESS;
+
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        $_SESSION['modal_message'] = "Error al procesar la devolución y actualizar el stock: " . $e->getMessage();
+        $_SESSION['modal_type'] = ALERT_DANGER;
+        error_log("Error al procesar devolución y stock en gestion_existencias_devoluciones.php: " . $e->getMessage());
+    }
+    // Redirigir siempre después de procesar el POST
+    header("Location: gestion_existencias_devoluciones.php");
+    exit();
+}
 
 
 // --- Lógica de Filtrado de Devoluciones ---
@@ -99,14 +163,14 @@ $sql = "SELECT d.devolucion_id,
                 dd.cantidad, dd.motivo, dd.reingresado_stock,
                 pr.nombre AS producto,
                 CASE
-                    WHEN d.tipo = 'cliente' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                                 FROM persona p
-                                                 JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
-                                                 WHERE uc.usuario_cliente_id = d.usuario_cliente_id)
-                    WHEN d.tipo = 'proveedor' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
-                                                 FROM persona p
-                                                 JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
-                                                 WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
+                    WHEN d.tipo = 'cliente' THEN COALESCE((SELECT p.nombre || ' ' || p.apellido_paterno
+                                                           FROM persona p
+                                                           JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
+                                                           WHERE uc.usuario_cliente_id = d.usuario_cliente_id), 'Cliente Desconocido')
+                    WHEN d.tipo = 'proveedor' THEN COALESCE((SELECT p.nombre || ' ' || p.apellido_paterno
+                                                             FROM persona p
+                                                             JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
+                                                             WHERE ue.usuario_empleado_id = d.usuario_empleado_id), 'Empleado Desconocido')
                     ELSE 'N/A'
                 END AS devuelto_por,
                 d.tipo
@@ -116,9 +180,16 @@ $sql = "SELECT d.devolucion_id,
         $whereClause
         ORDER BY d.devolucion_id DESC";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$devoluciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $devoluciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar devoluciones: " . $e->getMessage());
+    $devoluciones = []; // Asegura que $devoluciones esté definido
+    $mensaje = "Error al cargar las devoluciones: " . $e->getMessage();
+    $tipoMensaje = ALERT_DANGER;
+}
 
 // Obtener todos los productos para el nuevo filtro desplegable
 $sqlProductos = "SELECT producto_id, nombre FROM producto ORDER BY nombre";
