@@ -1,13 +1,5 @@
-
-.icontable {
-  width: 50px;
-  height: auto;
-
-
-}
-
-
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -20,39 +12,50 @@ html, body {
 }
 
 .content {
-  flex: 1; 
+  flex: 1;
 }
+
 body {
-  
-  background-color: #EAEDED; /* Amazon light grey background */
+
+  background-color: #EAEDED;
+  /* Amazon light grey background */
   font-family: 'Segoe UI', sans-serif;
   color: #111;
 }
 
-.divcontent{
+.cardhead_carouselprod {
+  height: 300px;
+  width: 300px;
+}
+
+.divcontent {
   margin-left: 150px;
   margin-right: 150px;
 }
 
-.izquierda_arrow, .derecha_arrow {
-    color: black;
-    font-size: 2rem; 
-}
-.carouselprods, .carousel-control-prev {
-    left: -110px;
-    border-bottom: 0;
-    font-size: 40px;
-    color: #444;
-}
- 
-.carouselprods, .carousel-control-next {
-    right: -110px;
-    border-bottom: 0;
-    font-size: 40px;
-    color: #444;
+.izquierda_arrow,
+.derecha_arrow {
+  color: black;
+  font-size: 2rem;
 }
 
-.cardprod{
+.carouselprods,
+.carousel-control-prev {
+  left: -110px;
+  border-bottom: 0;
+  font-size: 40px;
+  color: #444;
+}
+
+.carouselprods,
+.carousel-control-next {
+  right: -110px;
+  border-bottom: 0;
+  font-size: 40px;
+  color: #444;
+}
+
+.cardprod {
   height: 450px;
   width: auto;
 }
@@ -66,72 +69,72 @@ body {
 }
 
 .card-img-top-prod {
-  
+
   height: 90%;
   width: 90%;
 }
 
 p {
-      font-size: 16px;
-    }
+  font-size: 16px;
+}
 
 .sidebar {
   max-width: 12%;
-  background-color: #e8e8e8  ; 
+  background-color: #e8e8e8;
   margin-left: 12%;
   color: white;
   border: 2px solid #ccc;
 }
 
 
-.div-info{
+.div-info {
   margin-right: 250px;
 }
 
-.card-user-compras{
+.card-user-compras {
   margin: 10px auto;
   margin-left: 2%;
 }
 
-.container-fluid{
+.container-fluid {
 
   margin-top: 30px;
   margin-bottom: 30px;
 }
 
-  
 
-  /* Contenido principal que ocupa el resto del espacio */
-  main {
-    flex: 1;
-  }
+
+/* Contenido principal que ocupa el resto del espacio */
+main {
+  flex: 1;
+}
 
 .login-box {
-            max-width: 500px;
-            margin: 80px auto;
-            padding: 30px;
-            border: 1px solid #adacc0;
-            border-radius: 8px;
-            background-color: #EAEDED ;
-  }
+  max-width: 500px;
+  margin: 80px auto;
+  padding: 30px;
+  border: 1px solid #adacc0;
+  border-radius: 8px;
+  background-color: #EAEDED;
+}
 
 .register-box h2 {
-    margin: 0;
-    background-color: #f1f1f1;
-    padding: 30px;
-  }
+  margin: 0;
+  background-color: #f1f1f1;
+  padding: 30px;
+}
 
 .register-box form {
-    padding: 30px;
-  }
+  padding: 30px;
+}
 
 .register-box {
-            max-width: 900px;
-            margin: 80px auto;
-            border: 1px solid #adacc0;
-            border-radius: 8px;
-            background-color: #EAEDED;
-  }
+  max-width: 900px;
+  margin: 80px auto;
+  border: 1px solid #adacc0;
+  border-radius: 8px;
+  background-color: #EAEDED;
+}
 
 
 
@@ -140,5 +143,4 @@ p {
   max-width: 1000px;
   border: 1px solid #adacc0;
   border-radius: 8px
-
-  }
+}
