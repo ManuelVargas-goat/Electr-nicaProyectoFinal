@@ -54,6 +54,25 @@ $stmtProv = $pdo->prepare($sqlProveedores);
 $stmtProv->execute([':filtro' => "%$filtro%"]);
 $proveedores = $stmtProv->fetchAll(PDO::FETCH_ASSOC); // Usar FETCH_ASSOC
 
+// --- NUEVA LÓGICA PARA OBTENER LAS CATEGORÍAS DE CADA PROVEEDOR ---
+$proveedorCategorias = [];
+if (!empty($proveedores)) {
+    $stmtCategorias = $pdo->prepare("
+        SELECT c.nombre
+        FROM categoria c
+        JOIN proveedor_categoria pc ON c.categoria_id = pc.categoria_id
+        WHERE pc.proveedor_id = :proveedor_id
+        ORDER BY c.nombre
+    ");
+    foreach ($proveedores as $prov) {
+        $stmtCategorias->execute([':proveedor_id' => $prov['proveedor_id']]);
+        $categorias = $stmtCategorias->fetchAll(PDO::FETCH_COLUMN); // Obtiene solo los nombres de las categorías
+        // Almacena las categorías como una cadena separada por comas para cada proveedor
+        $proveedorCategorias[$prov['proveedor_id']] = implode(', ', $categorias); 
+    }
+}
+// --- FIN DE NUEVA LÓGICA ---
+
 // Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 ?>
@@ -261,20 +280,11 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             if (!empty($mensaje) && !empty($tipoMensaje)) {
                 $alertClass = '';
                 switch ($tipoMensaje) {
-                    case 'success':
-                        $alertClass = 'alert-success';
-                        break;
-                    case 'danger':
-                        $alertClass = 'alert-danger';
-                        break;
-                    case 'warning':
-                        $alertClass = 'alert-warning';
-                        break;
-                    case 'info':
-                        $alertClass = 'alert-info';
-                        break;
-                    default:
-                        $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
+                    case 'success': $alertClass = 'alert-success'; break;
+                    case 'danger':  $alertClass = 'alert-danger';  break;
+                    case 'warning': $alertClass = 'alert-warning'; break;
+                    case 'info':    $alertClass = 'alert-info';    break;
+                    default:        $alertClass = 'alert-info';
                 }
                 echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
                 echo htmlspecialchars($mensaje); // Muestra el mensaje escapando caracteres especiales
@@ -309,7 +319,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <th>Ciudad</th>
                             <th>Dirección</th>
                             <th>Código Postal</th>
-                            <th>Acción</th>
+                            <th>Categorías</th> <th>Acción</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -323,22 +333,25 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                     <td><?= htmlspecialchars($prov['direccion']) ?></td>
                                     <td><?= htmlspecialchars($prov['codigo_postal']) ?></td>
                                     <td>
+                                        <?= htmlspecialchars($proveedorCategorias[$prov['proveedor_id']] ?? 'N/A') ?>
+                                    </td>
+                                    <td>
                                         <div class="d-flex justify-content-center gap-2">
                                             <a href="editar_proveedor.php?id=<?= htmlspecialchars($prov['proveedor_id']) ?>" class="btn btn-sm btn-info">Editar</a>
                                             <button type="button"
-                                                    class="btn btn-sm btn-danger delete-btn"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#confirmDeleteProveedorModal"
-                                                    data-id="<?= htmlspecialchars($prov['proveedor_id']) ?>"
-                                                    data-nombre="<?= htmlspecialchars($prov['nombre_empresa']) ?>">
-                                                Eliminar
+                                                     class="btn btn-sm btn-danger delete-btn"
+                                                     data-bs-toggle="modal"
+                                                     data-bs-target="#confirmDeleteProveedorModal"
+                                                     data-id="<?= htmlspecialchars($prov['proveedor_id']) ?>"
+                                                     data-nombre="<?= htmlspecialchars($prov['nombre_empresa']) ?>">
+                                                    Eliminar
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php else: ?>
-                            <tr><td colspan="7" class="text-muted">No se encontraron resultados.</td></tr>
+                            <tr><td colspan="8" class="text-muted">No se encontraron resultados.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>

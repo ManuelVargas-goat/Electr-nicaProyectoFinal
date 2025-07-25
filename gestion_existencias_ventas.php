@@ -48,46 +48,75 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
 // Obtener estados para el filtro
 $estados = $pdo->query("SELECT estado_id, nombre FROM estado ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 
+// **NUEVO: Obtener todos los clientes para el dropdown**
+$sql_clientes = "SELECT uc.usuario_cliente_id, per.nombre, per.apellido_paterno
+                 FROM usuario_cliente uc
+                 JOIN persona per ON uc.persona_id = per.persona_id
+                 ORDER BY per.nombre, per.apellido_paterno";
+$stmt_clientes = $pdo->query($sql_clientes);
+$clientes = $stmt_clientes->fetchAll(PDO::FETCH_ASSOC);
+
 // Capturar filtros de ventas
-$filtroCliente = $_GET['cliente'] ?? '';
-$filtroFecha = $_GET['fecha'] ?? '';
+$filtroClienteId = $_GET['cliente_id'] ?? ''; // CAMBIO: Ahora se espera el ID del cliente
+$filtroFechaInicio = $_GET['fecha_inicio'] ?? '';
+$filtroFechaFin = $_GET['fecha_fin'] ?? '';
 $filtroEstadoId = $_GET['estado'] ?? '';
+$filtroVentaId = $_GET['venta_id'] ?? '';
 
 $where = [];
 $params = [];
 
-if ($filtroCliente !== '') {
-    $where[] = "(per.nombre || ' ' || per.apellido_paterno) ILIKE :cliente";
-    $params[':cliente'] = "%$filtroCliente%";
+// CAMBIO: Filtrar por ID de cliente si se seleccionó uno
+if ($filtroClienteId !== '') {
+    $where[] = "c.usuario_cliente_id = :cliente_id";
+    $params[':cliente_id'] = (int)$filtroClienteId;
 }
-if ($filtroFecha !== '') {
-    $where[] = "CAST(c.fecha_compra AS DATE) = :fecha";
-    $params[':fecha'] = $filtroFecha;
+if ($filtroFechaInicio !== '') {
+    $where[] = "CAST(c.fecha_compra AS DATE) >= :fecha_inicio";
+    $params[':fecha_inicio'] = $filtroFechaInicio;
+}
+if ($filtroFechaFin !== '') {
+    $where[] = "CAST(c.fecha_compra AS DATE) <= :fecha_fin";
+    $params[':fecha_fin'] = $filtroFechaFin;
 }
 if ($filtroEstadoId !== '') {
     $where[] = "c.estado_id = :estado_id";
     $params[':estado_id'] = (int)$filtroEstadoId;
 }
+if ($filtroVentaId !== '') {
+    $where[] = "c.compra_id = :compra_id";
+    $params[':compra_id'] = (int)$filtroVentaId;
+}
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-// Consulta de ventas
-$sqlVentas = "SELECT c.compra_id, c.fecha_compra, pr.nombre AS producto, dc.cantidad,
-                     dc.precio_unitario, per.nombre || ' ' || per.apellido_paterno AS cliente, e.nombre AS estado
-             FROM compra c
-             JOIN detalle_compra dc ON c.compra_id = dc.compra_id
-             JOIN producto pr ON dc.producto_id = pr.producto_id
-             LEFT JOIN usuario_cliente uc ON uc.usuario_cliente_id = c.usuario_cliente_id
-             LEFT JOIN persona per ON uc.persona_id = per.persona_id
-             LEFT JOIN estado e ON c.estado_id = e.estado_id
-             $whereClause
-             ORDER BY c.compra_id DESC";
+$sqlVentas = "SELECT
+                c.compra_id,
+                c.fecha_compra,
+                COALESCE(per.nombre || ' ' || per.apellido_paterno, 'Cliente Invitado') AS cliente,
+                e.nombre AS estado,
+                SUM(dc.cantidad * dc.precio_unitario) AS total_compra,
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'producto', pr.nombre,
+                        'cantidad', dc.cantidad,
+                        'precio_unitario', dc.precio_unitario
+                    ) ORDER BY pr.nombre
+                ) AS productos_detalle
+              FROM compra c
+              JOIN detalle_compra dc ON c.compra_id = dc.compra_id
+              JOIN producto pr ON dc.producto_id = pr.producto_id
+              LEFT JOIN usuario_cliente uc ON uc.usuario_cliente_id = c.usuario_cliente_id
+              LEFT JOIN persona per ON uc.persona_id = per.persona_id
+              LEFT JOIN estado e ON c.estado_id = e.estado_id
+              $whereClause
+              GROUP BY c.compra_id, c.fecha_compra, cliente, e.nombre
+              ORDER BY c.compra_id DESC";
 
 $stmt = $pdo->prepare($sqlVentas);
 $stmt->execute($params);
-$ventas = $stmt->fetchAll(PDO::FETCH_ASSOC); // Asegúrate de que los resultados se obtengan como array asociativo.
+$ventas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 ?>
 
@@ -99,7 +128,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
     <style>
-        /* CSS para el sidebar y submenús */
+        /* CSS para el sidebar y submenús (mantengo el tuyo) */
         .sidebar {
             background-color: #1a202c; /* Color de fondo oscuro para el sidebar */
             color: #e0e0e0;
@@ -203,6 +232,68 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         .content {
             padding: 20px;
         }
+
+        /* Estilos para las filas desplegables */
+        .detalle-productos-row {
+            display: none; /* Oculto por defecto */
+            background-color: #f8f9fa; /* Un color de fondo diferente para el detalle */
+        }
+        .detalle-productos-row.show {
+            display: table-row;
+        }
+        .detalle-productos-row td {
+            padding-left: 30px; /* Indentación para el contenido del detalle */
+            border-top: none; /* Quita el borde superior para que parezca parte de la misma celda */
+        }
+        .detalle-productos-table {
+            width: 100%;
+            margin-top: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: .25rem;
+        }
+        .detalle-productos-table th, .detalle-productos-table td {
+            padding: .75rem;
+            vertical-align: top;
+            border-top: 1px solid #dee2e6;
+        }
+        .detalle-productos-table thead {
+            background-color: #e9ecef;
+        }
+        /* Nuevo estilo para el número de venta clicable */
+        .venta-id-toggle {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Estilo para la barra de búsqueda para que ocupe todo el ancho */
+        .search-bar-container {
+            width: 100%;
+            margin-bottom: 1.5rem; /* Ajuste para espaciar de la tabla */
+        }
+        .search-bar-form .form-control,
+        .search-bar-form .form-select {
+            flex-grow: 1; /* Permite que los inputs se estiren */
+            min-width: 0; /* Previene desbordamiento en flexbox */
+        }
+        .search-bar-form .col-auto {
+            flex-grow: 1;
+        }
+        .search-bar-form .col-auto:last-of-type {
+            flex-grow: 0; /* No permitir que los botones se estiren tanto */
+        }
+        .search-bar-form .btn {
+            width: 100%; /* Asegura que los botones ocupen el ancho de su columna */
+        }
+
+        /* Ajustes responsivos para que los campos no se apilen tan rápido */
+        @media (min-width: 992px) { /* Para pantallas grandes (lg y superiores) */
+            .search-bar-form .col-lg {
+                flex: 1 1 auto; /* Permite que los elementos se distribuyan uniformemente */
+            }
+            .search-bar-form .col-lg-auto {
+                flex: 0 0 auto; /* Para los botones, que no se estiren */
+            }
+        }
     </style>
 </head>
 <body>
@@ -282,64 +373,158 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             }
             ?>
 
-            <form class="row g-2 mb-4" method="GET">
-                <div class="col-md-3">
-                    <input type="text" name="cliente" value="<?= htmlspecialchars($filtroCliente) ?>" class="form-control" placeholder="Buscar Cliente">
-                </div>
-                <div class="col-md-3">
-                    <input type="date" name="fecha" value="<?= htmlspecialchars($filtroFecha) ?>" class="form-control">
-                </div>
-                <div class="col-md-3">
-                    <select name="estado" class="form-select">
-                        <option value="">Todos los Estados</option>
-                        <?php foreach ($estados as $estado): ?>
-                            <option value="<?= $estado['estado_id'] ?>" <?= $filtroEstadoId == $estado['estado_id'] ? 'selected' : '' ?>><?= htmlspecialchars($estado['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <button class="btn btn-primary w-100 fw-bold">Buscar</button>
-                </div>
-            </form>
+            <div class="search-bar-container">
+                <form class="row row-cols-lg-auto g-2 align-items-center search-bar-form" method="GET">
+                    <div class="col-12 col-lg">
+                        <label class="visually-hidden" for="venta_id">Número de Venta</label>
+                        <input type="text" name="venta_id" id="venta_id" value="<?= htmlspecialchars($filtroVentaId) ?>" class="form-control" placeholder="Número de Venta">
+                    </div>
+                    <div class="col-12 col-lg">
+                        <label class="visually-hidden" for="cliente_id">Buscar Cliente</label>
+                        <select name="cliente_id" id="cliente_id" class="form-select">
+                            <option value="">Todos los Clientes</option>
+                            <?php foreach ($clientes as $cliente): ?>
+                                <option value="<?= $cliente['usuario_cliente_id'] ?>" <?= $filtroClienteId == $cliente['usuario_cliente_id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($cliente['nombre'] . ' ' . $cliente['apellido_paterno']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg">
+                        <label for="fecha_inicio" class="visually-hidden">Fecha Inicio</label>
+                        <input type="date" name="fecha_inicio" id="fecha_inicio" value="<?= htmlspecialchars($filtroFechaInicio) ?>" class="form-control" title="Fecha de Inicio">
+                    </div>
+                    <div class="col-12 col-lg">
+                        <label for="fecha_fin" class="visually-hidden">Fecha Fin</label>
+                        <input type="date" name="fecha_fin" id="fecha_fin" value="<?= htmlspecialchars($filtroFechaFin) ?>" class="form-control" title="Fecha de Fin">
+                    </div>
+                    <div class="col-12 col-lg">
+                        <label class="visually-hidden" for="estado">Estado</label>
+                        <select name="estado" id="estado" class="form-select">
+                            <option value="">Todos los Estados</option>
+                            <?php foreach ($estados as $estado): ?>
+                                <option value="<?= $estado['estado_id'] ?>" <?= $filtroEstadoId == $estado['estado_id'] ? 'selected' : '' ?>><?= htmlspecialchars($estado['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-auto">
+                        <button type="submit" class="btn btn-primary fw-bold">Buscar</button>
+                    </div>
+                    <div class="col-12 col-lg-auto">
+                        <a href="gestion_existencias_ventas.php" class="btn btn-secondary">Limpiar</a>
+                    </div>
+                </form>
+            </div>
 
             <div class="table-responsive">
                 <table class="table table-bordered table-hover">
                     <thead class="text-center">
                         <tr>
                             <th>#Venta</th>
-                            <th>Fecha</th>
-                            <th>Producto</th>
-                            <th>Cantidad</th>
-                            <th>Precio</th>
-                            <th>Cliente</th>
+                            <th>Fecha</th> <th>Hora</th>  <th>Cliente</th>
+                            <th>Total</th>
                             <th>Estado</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="text-center">
                         <?php if (count($ventas) > 0): ?>
                             <?php foreach ($ventas as $venta): ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($venta['compra_id']) ?></td>
-                                    <td><?= htmlspecialchars($venta['fecha_compra']) ?></td>
-                                    <td><?= htmlspecialchars($venta['producto']) ?></td>
-                                    <td><?= htmlspecialchars($venta['cantidad']) ?></td>
-                                    <td>S/ <?= number_format($venta['precio_unitario'], 2) ?></td>
-                                    <td><?= htmlspecialchars($venta['cliente'] ?? 'No asignado') ?></td>
+                                    <td class="venta-id-toggle" data-bs-toggle="collapse" data-bs-target="#detalleVenta<?= $venta['compra_id'] ?>" aria-expanded="false" aria-controls="detalleVenta<?= $venta['compra_id'] ?>">
+                                        <strong><?= htmlspecialchars($venta['compra_id']) ?></strong>
+                                    </td>
+                                    <?php
+                                    $fecha = 'N/A';
+                                    $hora = 'N/A';
+                                    if (!empty($venta['fecha_compra'])) {
+                                        $dateTime = new DateTime($venta['fecha_compra']);
+                                        $fecha = $dateTime->format('Y-m-d');
+                                        $hora = $dateTime->format('H:i:s');
+                                    }
+                                    ?>
+                                    <td><?= htmlspecialchars($fecha) ?></td>
+                                    <td><?= htmlspecialchars($hora) ?></td>
+                                    <td><?= htmlspecialchars($venta['cliente']) ?></td>
+                                    <td>S/ <?= number_format($venta['total_compra'], 2) ?></td>
                                     <td>
                                         <?php if (!empty($venta['estado'])): ?>
-                                            <span class="badge bg-<?= strtolower($venta['estado']) == 'entregado' ? 'success' : (strtolower($venta['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
+                                            <?php
+                                            $badgeClass = 'secondary'; // Default
+                                            switch (strtolower($venta['estado'])) {
+                                                case 'entregado':
+                                                    $badgeClass = 'success';
+                                                    break;
+                                                case 'cancelado':
+                                                    $badgeClass = 'danger';
+                                                    break;
+                                                case 'devuelto': 
+                                                    $badgeClass = 'info';
+                                                    break;
+                                                case 'pendiente':
+                                                    $badgeClass = 'warning';
+                                                    break;
+                                                default:
+                                                    $badgeClass = 'secondary';
+                                                    break;
+                                            }
+                                            ?>
+                                            <span class="badge bg-<?= $badgeClass ?>">
                                                 <?= htmlspecialchars($venta['estado']) ?>
                                             </span>
                                         <?php else: ?>
                                             <span class="badge bg-secondary">Desconocido</span>
                                         <?php endif; ?>
                                     </td>
+                                    <td>
+                                        <?php if (strtolower($venta['estado']) === 'pendiente'): ?>
+                                            <a href="gestion_envio.php?compra_id=<?= htmlspecialchars($venta['compra_id']) ?>" class="btn btn-sm btn-primary">Gestionar Envío</a>
+                                        <?php else: ?>
+                                            <span class="text-muted">No gestionable</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <tr class="collapse detalle-productos-row" id="detalleVenta<?= $venta['compra_id'] ?>">
+                                    <td colspan="7"> <div class="p-3">
+                                            <strong>Productos de la Orden #<?= htmlspecialchars($venta['compra_id']) ?>:</strong>
+                                            <table class="detalle-productos-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Producto</th>
+                                                        <th>Cantidad</th>
+                                                        <th>Precio Unitario</th>
+                                                        <th>Subtotal</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php
+                                                    $productos = json_decode($venta['productos_detalle'], true);
+                                                    if (!empty($productos)):
+                                                        foreach ($productos as $item):
+                                                    ?>
+                                                            <tr>
+                                                                <td><?= htmlspecialchars($item['producto']) ?></td>
+                                                                <td><?= htmlspecialchars($item['cantidad']) ?></td>
+                                                                <td>S/ <?= number_format($item['precio_unitario'], 2) ?></td>
+                                                                <td>S/ <?= number_format($item['cantidad'] * $item['precio_unitario'], 2) ?></td>
+                                                            </tr>
+                                                    <?php
+                                                        endforeach;
+                                                    else:
+                                                    ?>
+                                                        <tr>
+                                                            <td colspan="4" class="text-center">No hay productos en esta orden.</td>
+                                                        </tr>
+                                                    <?php endif; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" class="text-center">No se encontraron ventas.</td>
-                            </tr>
+                                <td colspan="7" class="text-center">No se encontraron ventas.</td> </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -347,7 +532,9 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         </div>
     </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     document.addEventListener('DOMContentLoaded', (event) => {
         // Lógica del submenu para "Gestión de Catálogo"

@@ -1,6 +1,16 @@
 <?php
-session_start(); // Inicia la sesión para poder usar variables de sesión
-include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO a tu base de datos.
+session_start();
+include("config.php"); // Ensure this file contains your PDO connection ($pdo)
+
+// --- Constants ---
+define('PEDIDO_ESTADO_ENTREGADO', 'entregado');
+define('PEDIDO_ESTADO_CANCELADO', 'cancelado');
+define('PEDIDO_ESTADO_PENDIENTE', 'pendiente');
+
+define('ALERT_SUCCESS', 'success');
+define('ALERT_DANGER', 'danger');
+define('ALERT_WARNING', 'warning');
+define('ALERT_INFO', 'info');
 
 // Redirecciona al login si el usuario no ha iniciado sesión
 if (!isset($_SESSION['usuario'])) {
@@ -8,7 +18,7 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
-// Obtener datos del usuario actual (si ya no están en sesión)
+// Obtener datos del usuario actual
 $usuario = $_SESSION['usuario'];
 $sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
                 FROM usuario_empleado ue
@@ -19,35 +29,48 @@ $stmt = $pdo->prepare($sql_usuario);
 $stmt->execute([':usuario' => $usuario]);
 $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Asignar valores
-$nombreCompleto = 'Usuario Desconocido'; // Valor predeterminado
-$rolUsuario = ''; // Valor predeterminado
+// Asignar valores (con valores predeterminados seguros)
+$nombreCompleto = 'Usuario Desconocido';
+$rolUsuario = '';
 if ($datosUsuario) {
     $nombreCompleto = htmlspecialchars($datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno']);
     $rolUsuario = strtolower(htmlspecialchars($datosUsuario['rol']));
 }
 
 // **LÓGICA PARA MOSTRAR MENSAJES EN ALERTAS DE BOOTSTRAP**
-// Priorizamos los mensajes almacenados en la sesión (para redirecciones POST)
-// Luego, si no hay en sesión, verificamos los parámetros GET
 $mensaje = '';
-$tipoMensaje = ''; // Puede ser 'success', 'danger', 'warning', 'info'
+$tipoMensaje = '';
 
 if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     $mensaje = $_SESSION['modal_message'];
     $tipoMensaje = $_SESSION['modal_type'];
-    // Limpiar las variables de sesión para que el mensaje no se muestre de nuevo al recargar la página
-    unset($_SESSION['modal_message']);
+    unset($_SESSION['modal_message']); // Limpiar la sesión después de leer
     unset($_SESSION['modal_type']);
 } elseif (isset($_GET['mensaje']) && !empty($_GET['mensaje'])) {
-    // Si el mensaje viene por GET (para redirecciones GET)
     $mensaje = $_GET['mensaje'];
-    $tipoMensaje = $_GET['tipo'] ?? 'info'; // 'info' como tipo predeterminado si no se especifica
+    $tipoMensaje = $_GET['tipo'] ?? ALERT_INFO;
 }
+
+// Generar token CSRF para el formulario
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
 
 // Procesar acciones (Confirmar/Cancelar Pedido)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Verificación CSRF
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $csrf_token) {
+        $_SESSION['modal_message'] = "Error de seguridad: Solicitud no válida. Inténtelo de nuevo.";
+        $_SESSION['modal_type'] = ALERT_DANGER;
+        header("Location: gestion_existencias_pedidos.php");
+        exit();
+    }
+    // Opcionalmente regenerar el token después de un uso exitoso para hacerlo de un solo uso
+    // Esto es importante si el formulario podría ser enviado múltiples veces por la misma página
+    // unset($_SESSION['csrf_token']); // Comentar si se usa para múltiples envíos sin recargar, descomentar para un solo uso por carga.
+
     if (!empty($_POST['accion']) && !empty($_POST['pedido_id']) && is_numeric($_POST['pedido_id'])) {
         $accion = $_POST['accion'];
         $pedidoId = (int) $_POST['pedido_id'];
@@ -56,11 +79,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             if ($accion === 'confirmar') {
-                // Actualizar estado del pedido a 'entregado'
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'entregado' WHERE pedido_id = :id");
-                $stmt->execute([':id' => $pedidoId]);
+                // *** INICIO DE LA MODIFICACIÓN ***
+                // Se añade 'fecha_confirmacion = NOW()' a la consulta UPDATE
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado, fecha_confirmacion = NOW() WHERE pedido_id = :id");
+                $stmt->execute([':estado' => PEDIDO_ESTADO_ENTREGADO, ':id' => $pedidoId]);
+                // *** FIN DE LA MODIFICACIÓN ***
 
-                // Actualizar stock de los productos en el pedido
                 $stmtDetalles = $pdo->prepare("SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = :id");
                 $stmtDetalles->execute([':id' => $pedidoId]);
 
@@ -68,21 +92,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $productoId = $detalle['producto_id'];
                     $cantidad = $detalle['cantidad'];
 
-                    // Verificar si el producto ya tiene un registro en stock
+                    // Verificar si el producto ya existe en stock
                     $checkStock = $pdo->prepare("SELECT COUNT(*) FROM stock WHERE producto_id = :producto_id");
                     $checkStock->execute([':producto_id' => $productoId]);
                     $existe = $checkStock->fetchColumn();
 
                     if ($existe) {
-                        // Si existe, actualizar la cantidad
-                        $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad WHERE producto_id = :producto_id");
+                        // Actualiza la cantidad y la fecha de última entrada
+                        $actualizarStock = $pdo->prepare("UPDATE stock SET cantidad = cantidad + :cantidad, fecha_ultima_entrada = NOW() WHERE producto_id = :producto_id");
                         $actualizarStock->execute([
                             ':cantidad' => $cantidad,
                             ':producto_id' => $productoId
                         ]);
                     } else {
-                        // Si no existe, insertar un nuevo registro de stock
-                        $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad) VALUES (:producto_id, :cantidad)");
+                        // Inserta la cantidad y la fecha de primera entrada
+                        $insertarStock = $pdo->prepare("INSERT INTO stock (producto_id, cantidad, fecha_primera_entrada) VALUES (:producto_id, :cantidad, NOW())");
                         $insertarStock->execute([
                             ':producto_id' => $productoId,
                             ':cantidad' => $cantidad
@@ -91,19 +115,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $pdo->commit();
-                // Usar variables de sesión para el mensaje en redirecciones POST
                 $_SESSION['modal_message'] = "Recepción confirmada y stock actualizado correctamente.";
-                $_SESSION['modal_type'] = "success";
+                $_SESSION['modal_type'] = ALERT_SUCCESS;
                 header("Location: gestion_existencias_pedidos.php");
                 exit();
 
             } elseif ($accion === 'cancelar') {
-                $stmt = $pdo->prepare("UPDATE pedido SET estado = 'cancelado' WHERE pedido_id = :id");
-                $stmt->execute([':id' => $pedidoId]);
+                $stmt = $pdo->prepare("UPDATE pedido SET estado = :estado WHERE pedido_id = :id");
+                $stmt->execute([':estado' => PEDIDO_ESTADO_CANCELADO, ':id' => $pedidoId]);
 
                 $pdo->commit();
                 $_SESSION['modal_message'] = "Pedido cancelado correctamente.";
-                $_SESSION['modal_type'] = "info";
+                $_SESSION['modal_type'] = ALERT_INFO;
                 header("Location: gestion_existencias_pedidos.php");
                 exit();
             }
@@ -111,7 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) {
             $pdo->rollBack();
             $_SESSION['modal_message'] = "Error al procesar acción: " . $e->getMessage();
-            $_SESSION['modal_type'] = "danger";
+            $_SESSION['modal_type'] = ALERT_DANGER;
+            error_log("Error al procesar acción en gestion_existencias_pedidos.php: " . $e->getMessage());
             header("Location: gestion_existencias_pedidos.php");
             exit();
         }
@@ -133,6 +157,7 @@ $params = [];
 
 if (!empty($filtroPedidoId)) {
     // Usar CAST para asegurar que la comparación sea con texto si pedido_id es numérico en la DB
+    // Note: For PostgreSQL, TEXT CAST with ILIKE is appropriate. For MySQL/SQL Server, use VARCHAR/NVARCHAR or direct numeric comparison if type matches.
     $where[] = "CAST(p.pedido_id AS TEXT) ILIKE :pedido_id";
     $params[':pedido_id'] = "%$filtroPedidoId%";
 }
@@ -155,7 +180,10 @@ $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 $sql = "
     SELECT
       p.pedido_id,
-      p.fecha_pedido,
+      TO_CHAR(p.fecha_pedido, 'YYYY-MM-DD') AS fecha_creacion_solo,
+      TO_CHAR(p.fecha_pedido, 'HH24:MI:SS') AS hora_creacion_solo,
+      TO_CHAR(p.fecha_confirmacion, 'YYYY-MM-DD') AS fecha_recepcion_solo,
+      TO_CHAR(p.fecha_confirmacion, 'HH24:MI:SS') AS hora_recepcion_solo,
       p.estado,
       COALESCE(per.nombre || ' ' || per.apellido_paterno, 'N/A') AS empleado,
       SUM(dp.cantidad * CASE
@@ -179,7 +207,7 @@ $sql = "
     LEFT JOIN usuario_empleado ue ON p.usuario_empleado_id = ue.usuario_empleado_id
     LEFT JOIN persona per ON ue.persona_id = per.persona_id
     $whereClause
-    GROUP BY p.pedido_id, p.fecha_pedido, per.nombre, per.apellido_paterno, p.estado
+    GROUP BY p.pedido_id, p.fecha_pedido, p.fecha_confirmacion, per.nombre, per.apellido_paterno, p.estado
     ORDER BY p.pedido_id DESC
 ";
 
@@ -381,24 +409,25 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             if (!empty($mensaje) && !empty($tipoMensaje)) {
                 $alertClass = '';
                 switch ($tipoMensaje) {
-                    case 'success':
+                    case ALERT_SUCCESS:
                         $alertClass = 'alert-success';
                         break;
-                    case 'danger':
+                    case ALERT_DANGER:
                         $alertClass = 'alert-danger';
                         break;
-                    case 'warning':
+                    case ALERT_WARNING:
                         $alertClass = 'alert-warning';
                         break;
-                    case 'info':
+                    case ALERT_INFO:
                         $alertClass = 'alert-info';
                         break;
                     default:
-                        $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
+                        $alertClass = 'alert-info';
                 }
-                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
-                echo htmlspecialchars($mensaje); // Muestra el mensaje escapando caracteres especiales
-                echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'; // Botón para cerrar la alerta
+                // Aplica los estilos para que la alerta sea más ancha
+                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert" style="margin-left: -20px; margin-right: -20px; width: calc(100% + 40px);">';
+                echo htmlspecialchars($mensaje);
+                echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
                 echo '</div>';
             }
             ?>
@@ -442,7 +471,10 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                     <thead class="text-center">
                         <tr>
                             <th>#Pedido</th>
-                            <th>Fecha</th>
+                            <th>Fecha Creación</th>
+                            <th>Hora Creación</th> 
+                            <th>Fecha Recepción</th>
+                            <th>Hora Recepción</th>
                             <th>Empleado</th>
                             <th>Cantidad Total</th>
                             <th>Total (S/)</th>
@@ -461,33 +493,38 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                         style="cursor:pointer">
                                         <?= htmlspecialchars($row['pedido_id']) ?>
                                     </td>
-                                    <td><?= htmlspecialchars($row['fecha_pedido']) ?></td>
+                                    <td><?= htmlspecialchars($row['fecha_creacion_solo']) ?></td> 
+                                    <td><?= htmlspecialchars($row['hora_creacion_solo']) ?></td> 
+                                    <td><?= htmlspecialchars($row['fecha_recepcion_solo'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['hora_recepcion_solo'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['empleado']) ?></td>
                                     <td><?= htmlspecialchars($row['total_cantidad']) ?></td>
                                     <td>S/ <?= number_format($row['total_precio'], 2) ?></td>
                                     <td>
-                                        <span class="badge bg-<?= strtolower($row['estado']) == 'entregado' ? 'success' : (strtolower($row['estado']) == 'cancelado' ? 'danger' : 'warning') ?>">
+                                        <span class="badge bg-<?= strtolower($row['estado']) == PEDIDO_ESTADO_ENTREGADO ? ALERT_SUCCESS : (strtolower($row['estado']) == PEDIDO_ESTADO_CANCELADO ? ALERT_DANGER : ALERT_WARNING) ?>">
                                             <?= ucfirst(htmlspecialchars($row['estado'])) ?>
                                         </span>
                                     </td>
                                     <td>
-                                        <?php if (!in_array(strtolower($row['estado']), ['entregado', 'cancelado'])): ?>
+                                        <?php if (!in_array(strtolower($row['estado']), [PEDIDO_ESTADO_ENTREGADO, PEDIDO_ESTADO_CANCELADO])): ?>
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Acciones</button>
                                                 <ul class="dropdown-menu">
                                                     <li>
                                                         <form method="POST" class="m-0">
+                                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                                                             <input type="hidden" name="pedido_id" value="<?= htmlspecialchars($row['pedido_id']) ?>">
                                                             <input type="hidden" name="accion" value="confirmar">
                                                             <button type="submit" class="dropdown-item">Confirmar Recepción</button>
                                                         </form>
                                                     </li>
                                                     <li>
-                                                        <form method="POST" class="m-0">
-                                                            <input type="hidden" name="pedido_id" value="<?= htmlspecialchars($row['pedido_id']) ?>">
-                                                            <input type="hidden" name="accion" value="cancelar">
-                                                            <button type="submit" class="dropdown-item">Cancelar Pedido</button>
-                                                        </form>
+                                                        <a href="#" class="dropdown-item cancel-btn"
+                                                           data-bs-toggle="modal"
+                                                           data-bs-target="#confirmCancelModal"
+                                                           data-pedido-id="<?= htmlspecialchars($row['pedido_id']) ?>">
+                                                            Cancelar Pedido
+                                                        </a>
                                                     </li>
                                                     <li>
                                                         <a class="dropdown-item" href="editar_pedido.php?id=<?= htmlspecialchars($row['pedido_id']) ?>">Modificar</a>
@@ -500,13 +537,13 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                     </td>
                                 </tr>
                                 <tr class="collapse bg-light" id="detalle<?= $row['pedido_id'] ?>">
-                                    <td colspan="7">
+                                    <td colspan="10"> 
                                         <div class="p-3 text-start">
                                             <h6 class="fw-bold mb-3">Productos del Pedido</h6>
                                             <ul class="list-group list-group-flush">
                                                 <?php
                                                 $productos_decodificados = json_decode($row['productos'], true);
-                                                if (is_array($productos_decodificados)):
+                                                if (json_last_error() === JSON_ERROR_NONE && is_array($productos_decodificados)):
                                                     foreach ($productos_decodificados as $item):
                                                 ?>
                                                         <li class="list-group-item d-flex justify-content-between">
@@ -516,7 +553,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                                 <?php
                                                     endforeach;
                                                 else:
-                                                    echo '<li class="list-group-item">No hay productos asociados a este pedido.</li>';
+                                                    echo '<li class="list-group-item text-danger">Error al cargar los productos o no hay productos asociados a este pedido.</li>';
                                                 endif;
                                                 ?>
                                             </ul>
@@ -526,11 +563,34 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" class="text-center">No se encontraron pedidos.</td>
+                                <td colspan="10" class="text-center">No se encontraron pedidos.</td> 
                             </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmCancelModal" tabindex="-1" aria-labelledby="confirmCancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmCancelModalLabel">Confirmar Cancelación de Pedido</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                ¿Estás seguro de que deseas cancelar el pedido con ID: <span id="modalPedidoId"></span>? Esta acción no se puede deshacer.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <form method="POST" id="cancelForm" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                    <input type="hidden" name="pedido_id" id="modalPedidoIdInput">
+                    <input type="hidden" name="accion" value="cancelar">
+                    <button type="submit" class="btn btn-danger">Confirmar Cancelación</button>
+                </form>
             </div>
         </div>
     </div>
@@ -563,16 +623,16 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
         // Abre el submenú de existencias si alguna de sus sub-páginas está activa
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
-             existenciasSubmenu.classList.add('active');
+            existenciasSubmenu.classList.add('active');
         }
         
         if (existenciasToggle) {
-             existenciasToggle.addEventListener('click', function(e) {
-                 e.preventDefault();
-                 if (existenciasSubmenu) {
-                     existenciasSubmenu.classList.toggle('active');
-                 }
-             });
+            existenciasToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (existenciasSubmenu) {
+                    existenciasSubmenu.classList.toggle('active');
+                }
+            });
         }
 
         // Script para evitar que los dropdowns se cierren al hacer clic dentro
@@ -585,6 +645,28 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         menus.forEach(menu => {
             menu.addEventListener('click', e => e.stopPropagation());
         });
+
+        // Lógica para el modal de confirmación de cancelación
+        const confirmCancelModal = document.getElementById('confirmCancelModal');
+        if (confirmCancelModal) {
+            confirmCancelModal.addEventListener('show.bs.modal', function (event) {
+                // Botón que disparó el modal
+                const button = event.relatedTarget;
+                // Extraer información de los atributos data-*
+                const pedidoId = button.getAttribute('data-pedido-id');
+
+                // Actualizar el contenido del modal
+                const modalPedidoIdSpan = confirmCancelModal.querySelector('#modalPedidoId');
+                const modalPedidoIdInput = confirmCancelModal.querySelector('#modalPedidoIdInput');
+
+                if (modalPedidoIdSpan) {
+                    modalPedidoIdSpan.textContent = pedidoId;
+                }
+                if (modalPedidoIdInput) {
+                    modalPedidoIdInput.value = pedidoId;
+                }
+            });
+        }
     });
 </script>
 </body>

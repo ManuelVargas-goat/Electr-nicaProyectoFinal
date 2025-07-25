@@ -2,6 +2,16 @@
 session_start(); // Inicia la sesión para poder usar variables de sesión
 include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO a tu base de datos.
 
+// --- Constantes ---
+define('PEDIDO_ESTADO_ENTREGADO', 'entregado'); // No usado directamente aquí, pero útil para consistencia
+define('PEDIDO_ESTIDO_CANCELADO', 'cancelado'); // No usado directamente aquí
+define('PEDIDO_ESTADO_PENDIENTE', 'pendiente'); // No usado directamente aquí
+
+define('ALERT_SUCCESS', 'success');
+define('ALERT_DANGER', 'danger');
+define('ALERT_WARNING', 'warning');
+define('ALERT_INFO', 'info');
+
 // Redirecciona al login si el usuario no ha iniciado sesión
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
@@ -41,32 +51,52 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     $tipoMensaje = $_GET['tipo'] ?? 'info';
 }
 
-// Filtros
-$filtroDevolucion = $_GET['devolucion'] ?? '';
-$filtroFecha = $_GET['fecha'] ?? '';
-$filtroTipo = $_GET['tipo'] ?? '';
+// --- Generar token CSRF para el formulario (si es necesario para futuras acciones POST) ---
+// Aunque este archivo no tiene un POST directo para acciones, es buena práctica si se añade alguna.
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
-// Armado dinámico del WHERE
+
+// --- Lógica de Filtrado de Devoluciones ---
+$filtroDevolucionId = $_GET['devolucion_id'] ?? '';
+$filtroFechaInicio = $_GET['fecha_inicio'] ?? '';
+$filtroFechaFin = $_GET['fecha_fin'] ?? '';
+$filtroTipo = $_GET['tipo'] ?? '';
+$filtroProductoId = $_GET['producto_id'] ?? ''; // Nuevo filtro para producto
+
 $where = [];
 $params = [];
 
-if (!empty($filtroDevolucion)) {
-    $where[] = "d.devolucion_id = :devolucion";
-    $params[':devolucion'] = (int)$filtroDevolucion; // Asegúrate de que sea un entero
+if (!empty($filtroDevolucionId)) {
+    $where[] = "d.devolucion_id = :devolucion_id";
+    $params[':devolucion_id'] = (int)$filtroDevolucionId;
 }
-if (!empty($filtroFecha)) {
-    $where[] = "CAST(d.fecha AS DATE) = :fecha";
-    $params[':fecha'] = $filtroFecha;
+if (!empty($filtroFechaInicio)) {
+    $where[] = "d.fecha >= :fecha_inicio";
+    $params[':fecha_inicio'] = $filtroFechaInicio . ' 00:00:00'; // Incluir desde el inicio del día
+}
+if (!empty($filtroFechaFin)) {
+    $where[] = "d.fecha <= :fecha_fin";
+    $params[':fecha_fin'] = $filtroFechaFin . ' 23:59:59'; // Incluir hasta el final del día
 }
 if (!empty($filtroTipo)) {
     $where[] = "d.tipo = :tipo";
     $params[':tipo'] = $filtroTipo;
 }
+if (!empty($filtroProductoId)) { // Nuevo: Filtrar por producto
+    $where[] = "dd.producto_id = :producto_id";
+    $params[':producto_id'] = (int)$filtroProductoId;
+}
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
-// Consulta principal
-$sql = "SELECT d.devolucion_id, d.fecha, dd.cantidad, dd.motivo, dd.reingresado_stock,
+// Consulta principal para obtener las devoluciones y sus detalles
+$sql = "SELECT d.devolucion_id,
+                TO_CHAR(d.fecha, 'YYYY-MM-DD') AS fecha_solo_fecha,
+                TO_CHAR(d.fecha, 'HH24:MI:SS') AS fecha_solo_hora,
+                dd.cantidad, dd.motivo, dd.reingresado_stock,
                 pr.nombre AS producto,
                 CASE
                     WHEN d.tipo = 'cliente' THEN (SELECT p.nombre || ' ' || p.apellido_paterno
@@ -77,7 +107,7 @@ $sql = "SELECT d.devolucion_id, d.fecha, dd.cantidad, dd.motivo, dd.reingresado_
                                                  FROM persona p
                                                  JOIN usuario_empleado ue ON ue.persona_id = p.persona_id
                                                  WHERE ue.usuario_empleado_id = d.usuario_empleado_id)
-                    ELSE 'No asignado'
+                    ELSE 'N/A'
                 END AS devuelto_por,
                 d.tipo
         FROM devolucion d
@@ -88,7 +118,11 @@ $sql = "SELECT d.devolucion_id, d.fecha, dd.cantidad, dd.motivo, dd.reingresado_
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
-$devoluciones = $stmt->fetchAll(PDO::FETCH_ASSOC); // Fetch como array asociativo
+$devoluciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Obtener todos los productos para el nuevo filtro desplegable
+$sqlProductos = "SELECT producto_id, nombre FROM producto ORDER BY nombre";
+$productos = $pdo->query($sqlProductos)->fetchAll(PDO::FETCH_ASSOC);
 
 // Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
@@ -220,6 +254,60 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         .content {
             padding: 20px;
         }
+
+        /* Estilo para el input de búsqueda del producto */
+        .product-search-container {
+            position: relative;
+            width: 100%;
+        }
+        .product-search-input {
+            width: 100%;
+            padding-right: 1.5rem; /* Espacio para una posible flecha o limpiar texto */
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1rem 1rem;
+        }
+        .product-select-dropdown {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ced4da;
+            border-top: none;
+            border-radius: 0 0 .25rem .25rem;
+            position: absolute;
+            z-index: 1000;
+            background-color: #fff;
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+            padding: 0;
+            margin-top: -1px;
+        }
+        .product-select-dropdown option {
+            padding: .375rem .75rem;
+            cursor: pointer;
+        }
+        .product-select-dropdown option:hover {
+            background-color: #e9ecef;
+        }
+        .product-select-dropdown option[hidden] {
+            display: none;
+        }
+        .product-select-dropdown:focus {
+            outline: none;
+        }
+        
+        /* Ajustes específicos para que los botones quepan en línea */
+        .btn-group-inline .btn {
+            white-space: nowrap; /* Evita que el texto de los botones se rompa */
+            padding: .375rem .5rem; /* Reduce el padding de los botones */
+            font-size: .875rem; /* Reduce el tamaño de la fuente de los botones */
+        }
+        /* Margen entre botones dentro del mismo grupo en línea */
+        .btn-group-inline .btn + .btn {
+            margin-left: 5px; /* Pequeño margen entre botones */
+        }
     </style>
 </head>
 <body>
@@ -292,7 +380,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                     default:
                         $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
                 }
-                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
+                echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert" style="margin-left: -20px; margin-right: -20px; width: calc(100% + 40px);">';
                 echo htmlspecialchars($mensaje); // Muestra el mensaje escapando caracteres especiales
                 echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>'; // Botón para cerrar la alerta
                 echo '</div>';
@@ -303,22 +391,40 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 <a href="nueva_devolucion.php" class="btn btn-success">+ Generar Devolución</a>
             </div>
 
-            <form class="row g-2 mb-4" method="GET">
-                <div class="col-md-3">
-                    <input type="number" name="devolucion" value="<?= htmlspecialchars($filtroDevolucion) ?>" class="form-control" placeholder="#Devolución">
+            <form class="row gx-2 mb-4 align-items-end" method="GET">
+                <div class="col-md-2 col-sm-6">
+                    <label for="devolucion_id" class="form-label visually-hidden">#Devolución</label>
+                    <input type="number" id="devolucion_id" name="devolucion_id" value="<?= htmlspecialchars($filtroDevolucionId) ?>" class="form-control form-control-sm" placeholder="#Devolución">
                 </div>
-                <div class="col-md-3">
-                    <input type="date" name="fecha" value="<?= htmlspecialchars($filtroFecha) ?>" class="form-control">
+                <div class="col-md-2 col-sm-6">
+                    <label for="fecha_inicio" class="form-label visually-hidden">Fecha Inicio</label>
+                    <input type="date" id="fecha_inicio" name="fecha_inicio" value="<?= htmlspecialchars($filtroFechaInicio) ?>" class="form-control form-control-sm" title="Fecha de Inicio">
                 </div>
-                <div class="col-md-3">
-                    <select name="tipo" class="form-select">
+                <div class="col-md-2 col-sm-6">
+                    <label for="fecha_fin" class="form-label visually-hidden">Fecha Fin</label>
+                    <input type="date" id="fecha_fin" name="fecha_fin" value="<?= htmlspecialchars($filtroFechaFin) ?>" class="form-control form-control-sm" title="Fecha de Fin">
+                </div>
+                <div class="col-md-3 col-sm-6"> <label for="productSearchInput" class="form-label visually-hidden">Producto</label>
+                    <div class="product-search-container">
+                        <input type="text" id="productSearchInput" class="form-control form-control-sm product-search-input" placeholder="Todos los productos" autocomplete="off">
+                        <select name="producto_id" id="productoSelect" class="form-select product-select-dropdown" size="5" style="display: none;">
+                            <option value="">Todos los productos </option>
+                            <?php foreach ($productos as $prod): ?>
+                                <option value="<?= htmlspecialchars($prod['producto_id']) ?>" <?= ($filtroProductoId == $prod['producto_id']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($prod['nombre']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-1 col-sm-6"> <label for="tipo" class="form-label visually-hidden">Tipo</label>
+                    <select id="tipo" name="tipo" class="form-select form-select-sm">
                         <option value="">Todos</option>
-                        <option value="cliente" <?= $filtroTipo === 'cliente' ? 'selected' : '' ?>>Cliente</option>
-                        <option value="proveedor" <?= $filtroTipo === 'proveedor' ? 'selected' : '' ?>>Proveedor</option>
-                    </select>
+                        <option value="cliente" <?= $filtroTipo === 'cliente' ? 'selected' : '' ?>>Cli.</option> <option value="proveedor" <?= $filtroTipo === 'proveedor' ? 'selected' : '' ?>>Prov.</option> </select>
                 </div>
-                <div class="col-md-3">
-                    <button class="btn btn-primary w-100">Buscar</button>
+                <div class="col-md-2 col-sm-12 d-flex justify-content-end align-items-center btn-group-inline">
+                    <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+                    <a href="gestion_existencias_devoluciones.php" class="btn btn-secondary btn-sm">Limpiar</a>
                 </div>
             </form>
 
@@ -328,6 +434,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                         <tr>
                             <th>#Devolución</th>
                             <th>Fecha</th>
+                            <th>Hora</th>
                             <th>Producto</th>
                             <th>Cantidad</th>
                             <th>Motivo</th>
@@ -341,7 +448,8 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php foreach ($devoluciones as $row): ?>
                                 <tr>
                                     <td><?= htmlspecialchars($row['devolucion_id']) ?></td>
-                                    <td><?= htmlspecialchars($row['fecha']) ?></td>
+                                    <td><?= htmlspecialchars($row['fecha_solo_fecha']) ?></td>
+                                    <td><?= htmlspecialchars($row['fecha_solo_hora']) ?></td>
                                     <td><?= htmlspecialchars($row['producto']) ?></td>
                                     <td><?= htmlspecialchars($row['cantidad']) ?></td>
                                     <td><?= htmlspecialchars($row['motivo']) ?></td>
@@ -356,7 +464,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="8" class="text-center">No se encontraron devoluciones.</td>
+                                <td colspan="9" class="text-center">No se encontraron devoluciones.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -393,17 +501,125 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
         // Abre el submenú de existencias si alguna de sus sub-páginas está activa
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
-             existenciasSubmenu.classList.add('active');
+            existenciasSubmenu.classList.add('active');
         }
         
         if (existenciasToggle) {
-             existenciasToggle.addEventListener('click', function(e) {
-                 e.preventDefault();
-                 if (existenciasSubmenu) {
-                     existenciasSubmenu.classList.toggle('active');
-                 }
-             });
+            existenciasToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (existenciasSubmenu) {
+                    existenciasSubmenu.classList.toggle('active');
+                }
+            });
         }
+
+        // Script para evitar que los dropdowns se cierren al hacer clic dentro
+        const dropdowns = document.querySelectorAll('.dropdown-toggle');
+        dropdowns.forEach(btn => {
+            btn.addEventListener('click', e => e.stopPropagation());
+        });
+
+        const menus = document.querySelectorAll('.dropdown-menu');
+        menus.forEach(menu => {
+            menu.addEventListener('click', e => e.stopPropagation());
+        });
+
+        // --- Lógica para el filtro de producto con búsqueda ---
+        const productSearchInput = document.getElementById('productSearchInput');
+        const productoSelect = document.getElementById('productoSelect');
+        const allProductOptions = Array.from(productoSelect.options); // Guardar todas las opciones originales
+
+        // Mostrar/ocultar el select al enfocar/desenfocar el input
+        productSearchInput.addEventListener('focus', () => {
+            productoSelect.style.display = 'block';
+            filterProductOptions(); // Filtrar al enfocar por si ya hay texto
+        });
+
+        // Ocultar el select cuando se pierde el foco, con un pequeño retraso
+        // para permitir el clic en una opción
+        productSearchInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                productoSelect.style.display = 'none';
+            }, 150); // Pequeño retraso
+        });
+
+        // Filtrar opciones mientras se escribe
+        productSearchInput.addEventListener('input', filterProductOptions);
+
+        function filterProductOptions() {
+            const searchText = productSearchInput.value.toLowerCase();
+            let hasVisibleOptions = false;
+            allProductOptions.forEach(option => {
+                const optionText = option.textContent.toLowerCase();
+                // Si la opción es "Todos los productos" (value vacío)
+                if (option.value === "") {
+                    // Solo mostrar "Todos los productos" si el campo de búsqueda está vacío
+                    // o si el texto de búsqueda coincide con "todos los productos"
+                    if (searchText === "" || optionText.includes(searchText)) {
+                        option.style.display = '';
+                        option.hidden = false;
+                    } else {
+                        option.style.display = 'none';
+                        option.hidden = true;
+                    }
+                } else if (optionText.includes(searchText)) {
+                    option.style.display = ''; // Mostrar
+                    option.hidden = false;
+                    hasVisibleOptions = true;
+                } else {
+                    option.style.display = 'none'; // Ocultar
+                    option.hidden = true;
+                }
+            });
+            // Asegurarse de que el dropdown se muestre si hay opciones visibles o si el campo está vacío
+            if (hasVisibleOptions || searchText === "") {
+                productoSelect.style.display = 'block';
+            } else {
+                productoSelect.style.display = 'none';
+            }
+        }
+
+        // Seleccionar una opción del select y actualizar el input
+        productoSelect.addEventListener('change', () => {
+            const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+            if (selectedOption) {
+                if (selectedOption.value === "") {
+                    productSearchInput.value = ""; // Limpiar el input para que se vea el placeholder
+                    productSearchInput.placeholder = "Todos los productos"; // Asegurar que el placeholder se muestre
+                    productoSelect.value = ""; // Asegurar que el select retenga la opción vacía
+                } else {
+                    productSearchInput.value = selectedOption.textContent;
+                    productSearchInput.placeholder = ""; // Ocultar el placeholder
+                }
+                productoSelect.style.display = 'none'; // Ocultar el select después de la selección
+            }
+        });
+
+        // Al cargar la página, si hay un filtro de producto, mostrar el nombre; si no, dejar el input vacío
+        // para que el placeholder "Todos los productos" se vea.
+        const initialSelectedProductId = "<?= htmlspecialchars($filtroProductoId) ?>";
+        if (initialSelectedProductId) {
+            const selectedOption = Array.from(productoSelect.options).find(opt => opt.value === initialSelectedProductId);
+            if (selectedOption) {
+                productSearchInput.value = selectedOption.textContent;
+                productSearchInput.placeholder = ""; // Si hay un valor, ocultar el placeholder
+            }
+        } else {
+            productSearchInput.value = ""; // Asegura que el input esté vacío para que el placeholder se muestre
+            productSearchInput.placeholder = "Todos los productos"; // Establecer el placeholder
+        }
+
+        // Cuando el usuario borra el texto del input, el placeholder debe volver a aparecer.
+        productSearchInput.addEventListener('input', () => {
+            if (productSearchInput.value === "") {
+                productSearchInput.placeholder = "Todos los productos";
+                // Cuando el input está vacío, aseguramos que la opción "Todos los productos" esté seleccionada en el select oculto
+                productoSelect.value = ""; 
+            } else {
+                productSearchInput.placeholder = ""; 
+            }
+        });
+        
     });
 </script>
 </body>

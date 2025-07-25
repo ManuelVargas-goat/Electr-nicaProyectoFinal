@@ -7,7 +7,18 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
-$formError = ''; // Variable para errores de validación en este formulario (anteriormente $error)
+$formError = '';
+
+// --- Inicialización de variables del formulario ---
+// Estas variables se inicializan a vacío, y se llenarán con los datos de POST si el formulario es enviado,
+// o serán rellenadas por JavaScript desde sessionStorage si se regresa de una redirección.
+$nombre_empresa = '';
+$persona_id_selected = '';
+$pais_selected = '';
+$ciudad_selected = '';
+$direccion = '';
+$codigo_postal = '';
+$categorias_seleccionadas_post = []; // Para repoblar los checkboxes en caso de error de POST
 
 // Obtener personas para asociar con proveedor (incluyendo apellido_materno para el desplegable)
 $personas = [];
@@ -15,33 +26,32 @@ try {
     $stmtPersonas = $pdo->query("SELECT persona_id, nombre, apellido_paterno, apellido_materno FROM persona ORDER BY nombre");
     $personas = $stmtPersonas->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    // Manejar error al cargar personas, pero permite que el formulario se muestre
     $formError = "Error al cargar la lista de personas: " . $e->getMessage();
 }
 
-// Inicializar variables para mantener los valores en el formulario si hay un error de POST
-$nombre_empresa = '';
-$persona_id_selected = ''; // Variable para mantener la persona seleccionada en caso de error o desde la URL
-$pais_selected = '';
-$ciudad_selected = '';
-$direccion = '';
-$codigo_postal = '';
-
-// Verificar si se pasó un persona_id desde la URL (después de crear o editar una persona)
-// Si viene de una redirección de 'nueva_persona.php' o 'editar_persona.php'
-if (isset($_GET['persona_id']) && filter_var($_GET['persona_id'], FILTER_VALIDATE_INT)) {
-    $persona_id_selected = (int)$_GET['persona_id'];
-    // No necesitamos manejar $_GET['mensaje'] aquí directamente. Se espera que los mensajes se manejen con $_SESSION.
+// Obtener todas las categorías para el campo de selección múltiple con checkboxes
+$todas_las_categorias = [];
+try {
+    $stmtCategorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
+    $todas_las_categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $formError = "Error al cargar la lista de categorías: " . $e->getMessage();
 }
 
-
+// --- Procesamiento del formulario POST ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre_empresa = trim($_POST['nombre_empresa'] ?? '');
-    $persona_id_selected = (int)($_POST['persona_id'] ?? 0); // Captura el ID para repoblar el select
+    $persona_id_selected = (int)($_POST['persona_id'] ?? 0);
     $pais_selected = trim($_POST['pais'] ?? '');
     $ciudad_selected = trim($_POST['ciudad'] ?? '');
     $direccion = trim($_POST['direccion'] ?? '');
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
+    
+    $categorias_suministradas = $_POST['categorias_suministradas'] ?? [];
+    $categorias_suministradas = array_map('intval', $categorias_suministradas);
+    
+    // Guardar las categorías seleccionadas para repoblar el formulario en caso de error de validación
+    $categorias_seleccionadas_post = $categorias_suministradas;
 
     // Validaciones
     if (empty($nombre_empresa)) {
@@ -56,6 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formError = "La dirección es obligatoria.";
     } else {
         try {
+            $pdo->beginTransaction();
+
             $sql = "INSERT INTO proveedor (nombre_empresa, persona_id, pais, ciudad, direccion, codigo_postal)
                     VALUES (:nombre_empresa, :persona_id, :pais, :ciudad, :direccion, :codigo_postal)";
             $stmt = $pdo->prepare($sql);
@@ -68,17 +80,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':codigo_postal' => $codigo_postal
             ]);
 
-            // Establecer mensaje de éxito en la sesión y redirigir
+            $proveedor_id = $pdo->lastInsertId();
+
+            if (!empty($categorias_suministradas)) {
+                $sql_insert_pc = "INSERT INTO proveedor_categoria (proveedor_id, categoria_id) VALUES (:proveedor_id, :categoria_id)";
+                $stmt_insert_pc = $pdo->prepare($sql_insert_pc);
+                foreach ($categorias_suministradas as $cat_id) {
+                    $stmt_insert_pc->execute([
+                        ':proveedor_id' => $proveedor_id,
+                        ':categoria_id' => $cat_id
+                    ]);
+                }
+            }
+
+            $pdo->commit();
+
             $_SESSION['modal_message'] = "Proveedor registrado con éxito.";
             $_SESSION['modal_type'] = "success";
-            header("Location: gestion_catalogo_proveedores.php"); // Redirige a la gestión de proveedores
+            header("Location: gestion_catalogo_proveedores.php");
             exit();
         } catch (PDOException $e) {
-            // Error de base de datos
+            $pdo->rollBack();
             error_log("Error al registrar el proveedor en DB: " . $e->getMessage());
-            $formError = "Error al registrar el proveedor: " . $e->getMessage(); // Muestra el error en el formulario
+            $formError = "Error al registrar el proveedor: " . $e->getMessage();
         }
     }
+}
+
+// --- Verificar si se pasó un persona_id desde la URL (tiene prioridad sobre otros métodos si viene de una edición/selección) ---
+// Esto asegura que la persona seleccionada se muestre en el dropdown si se redirige con un ID específico.
+if (isset($_GET['persona_id']) && filter_var($_GET['persona_id'], FILTER_VALIDATE_INT)) {
+    $persona_id_selected = (int)$_GET['persona_id'];
 }
 ?>
 
@@ -91,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="css/estilos.css?v=<?= time(); ?>">
     <style>
         body {
-            background-color: #f8f9fa; /* Fondo claro general */
+            background-color: #f8f9fa;
         }
         .container {
             margin-top: 50px;
@@ -106,7 +138,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             border-radius: 8px;
         }
-        /* Estilos para el tema oscuro (si los tienes definidos en estilos.css o en el body) */
         body.dark-mode {
             background-color: #343a40;
             color: #f8f9fa;
@@ -132,6 +163,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-color: #889299;
             box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25);
         }
+        .checkbox-group {
+            border: 1px solid #ced4da;
+            border-radius: .25rem;
+            padding: .75rem 1rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .dark-mode .checkbox-group {
+            background-color: #6c757d;
+            border-color: #495057;
+        }
     </style>
 </head>
 <body>
@@ -145,14 +187,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     <?php endif; ?>
     <?php
-    // **BLOQUE PARA MOSTRAR LA ALERTA DE BOOTSTRAP (si viene de una redirección)**
-    // Esto es para mensajes que pudieron venir de 'nueva_persona.php' o 'editar_persona.php'
     $mensajeModal = '';
     $tipoMensajeModal = '';
     if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
         $mensajeModal = $_SESSION['modal_message'];
         $tipoMensajeModal = $_SESSION['modal_type'];
-        // Limpiar las variables de sesión para que el mensaje no se muestre de nuevo al recargar la página
         unset($_SESSION['modal_message']);
         unset($_SESSION['modal_type']);
     }
@@ -160,20 +199,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($mensajeModal) && !empty($tipoMensajeModal)) {
         $alertClass = '';
         switch ($tipoMensajeModal) {
-            case 'success':
-                $alertClass = 'alert-success';
-                break;
-            case 'danger':
-                $alertClass = 'alert-danger';
-                break;
-            case 'warning':
-                $alertClass = 'alert-warning';
-                break;
-            case 'info':
-                $alertClass = 'alert-info';
-                break;
-            default:
-                $alertClass = 'alert-info';
+            case 'success': $alertClass = 'alert-success'; break;
+            case 'danger':  $alertClass = 'alert-danger';  break;
+            case 'warning': $alertClass = 'alert-warning'; break;
+            case 'info':    $alertClass = 'alert-info';    break;
+            default:        $alertClass = 'alert-info';
         }
         echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert">';
         echo htmlspecialchars($mensajeModal);
@@ -211,10 +241,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <a href="#" id="btnEditarPersona" class="btn btn-outline-info flex-fill" title="Editar o seleccionar persona">
                         <?= ($persona_id_selected > 0) ? 'Editar Persona' : 'Seleccionar Persona' ?>
                     </a>
-                    <a href="nueva_persona.php?redirect_to=nuevo_proveedor.php" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
+                    <a href="nueva_persona.php?redirect_to=nuevo_proveedor.php" id="btnNuevaPersona" class="btn btn-outline-success flex-fill" title="Agregar nueva persona">
                         + Nueva Persona
                     </a>
                 </div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Categorías que puede suministrar:</label>
+            <input type="text" id="categoriaSearch" class="form-control mb-2" placeholder="Buscar categoría...">
+            <div class="checkbox-group" id="categoriasCheckboxGroup">
+                <?php if (empty($todas_las_categorias)): ?>
+                    <p class="text-muted">No hay categorías disponibles. Por favor, agregue categorías primero.</p>
+                <?php else: ?>
+                    <?php foreach ($todas_las_categorias as $categoria): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                name="categorias_suministradas[]" 
+                                value="<?= htmlspecialchars($categoria['categoria_id']) ?>" 
+                                id="categoria_<?= htmlspecialchars($categoria['categoria_id']) ?>"
+                                <?= in_array($categoria['categoria_id'], $categorias_seleccionadas_post) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="categoria_<?= htmlspecialchars($categoria['categoria_id']) ?>">
+                                <?= htmlspecialchars($categoria['nombre']) ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -240,7 +293,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <select name="ciudad" id="ciudad" class="form-select" required>
                 <option value="">Seleccione un país primero</option>
                 <?php
-                // Definir ciudadesPorPais en PHP para que esté disponible si el formulario se recarga con errores
                 $ciudadesPorPais = [
                     "Perú" => ["Arequipa", "Lima", "Cusco", "Trujillo", "Piura"],
                     "Colombia" => ["Bogotá", "Medellín", "Cali", "Barranquilla"],
@@ -297,6 +349,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const ciudadSelect = document.getElementById('ciudad');
     const personaSelect = document.getElementById('persona_id');
     const btnEditarPersona = document.getElementById('btnEditarPersona');
+    const btnNuevaPersona = document.getElementById('btnNuevaPersona'); // Nuevo: Referencia al botón "+ Nueva Persona"
+
+    // Elementos para la búsqueda de categorías
+    const categoriaSearchInput = document.getElementById('categoriaSearch');
+    const categoriasCheckboxGroup = document.getElementById('categoriasCheckboxGroup');
 
     function actualizarCiudades() {
         const paisSeleccionado = paisSelect.value;
@@ -315,48 +372,117 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             opcion.textContent = "Otra";
             ciudadSelect.appendChild(opcion);
         }
-
-        const ciudadSelectedFromPhp = '<?= $ciudad_selected ?>';
-        const paisSelectedFromPhp = '<?= $pais_selected ?>';
-
-        if (paisSeleccionado === paisSelectedFromPhp) {
-            ciudadSelect.value = ciudadSelectedFromPhp;
-        } else {
-            ciudadSelect.value = '';
-        }
+        // No pre-seleccionar ciudad aquí, eso lo hará el DOMContentLoaded con sessionStorage
     }
 
     function actualizarBotonEditarPersona() {
         const personaIdSeleccionada = personaSelect.value;
-        const redirectToUrl = 'nuevo_proveedor.php'; // Siempre redirigir a esta página
+        const redirectToUrl = 'nuevo_proveedor.php'; 
 
         if (personaIdSeleccionada && personaIdSeleccionada !== "") {
-            btnEditarPersona.href = `editar_persona.php?persona_id=${personaIdSeleccionada}&redirect_to=${redirectToUrl}`;
+            btnEditarPersona.href = `editar_persona.php?persona_id=${personaIdSeleccionada}&redirect_to=${encodeURIComponent(redirectToUrl)}`;
             btnEditarPersona.textContent = 'Editar Persona';
             btnEditarPersona.classList.remove('disabled');
         } else {
-            btnEditarPersona.href = `seleccionar_persona.php?redirect_to=${redirectToUrl}`;
+            btnEditarPersona.href = `seleccionar_persona.php?redirect_to=${encodeURIComponent(redirectToUrl)}`;
             btnEditarPersona.textContent = 'Seleccionar Persona';
             btnEditarPersona.classList.remove('disabled');
         }
     }
 
+    function filterCategories() {
+        const searchTerm = categoriaSearchInput.value.toLowerCase();
+        const categoryItems = categoriasCheckboxGroup.querySelectorAll('.form-check');
+
+        categoryItems.forEach(item => {
+            const label = item.querySelector('.form-check-label');
+            const categoryName = label ? label.textContent.toLowerCase() : '';
+            
+            if (categoryName.includes(searchTerm)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // --- Funciones para guardar/cargar el estado del formulario en sessionStorage ---
+    function saveFormDataToSessionStorage() {
+        const formData = {
+            nombre_empresa: document.getElementById('nombre_empresa').value,
+            persona_id_selected: personaSelect.value,
+            pais_selected: paisSelect.value,
+            ciudad_selected: ciudadSelect.value, // Asegurarse de tomar el valor actual
+            direccion: document.getElementById('direccion').value,
+            codigo_postal: document.getElementById('codigo_postal').value,
+            // Recoge los IDs de las categorías seleccionadas
+            categorias_seleccionadas_post: Array.from(categoriasCheckboxGroup.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value)
+        };
+        sessionStorage.setItem('form_nuevo_proveedor_temp_data', JSON.stringify(formData));
+    }
+
+    function loadFormDataFromSessionStorage() {
+        const tempData = sessionStorage.getItem('form_nuevo_proveedor_temp_data');
+        if (tempData) {
+            const data = JSON.parse(tempData);
+            document.getElementById('nombre_empresa').value = data.nombre_empresa || '';
+            personaSelect.value = data.persona_id_selected || '';
+            paisSelect.value = data.pais_selected || '';
+            document.getElementById('direccion').value = data.direccion || '';
+            document.getElementById('codigo_postal').value = data.codigo_postal || '';
+
+            // Restaurar categorías
+            categoriasCheckboxGroup.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = false; // Desmarcar todas por defecto antes de restaurar
+            });
+            if (data.categorias_seleccionadas_post) {
+                data.categorias_seleccionadas_post.forEach(selectedId => {
+                    const checkbox = document.getElementById(`categoria_${selectedId}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
+                });
+            }
+            
+            // Re-actualizar ciudades y luego seleccionar la ciudad guardada
+            actualizarCiudades(); // Esto llena las opciones de ciudad según el país
+            ciudadSelect.value = data.ciudad_selected || ''; // Y esto selecciona la ciudad si está en las opciones
+
+            // Es importante llamar a esta función para que el texto y href del botón "Editar Persona" se actualicen
+            actualizarBotonEditarPersona(); 
+
+            // Limpiar los datos temporales después de usarlos
+            sessionStorage.removeItem('form_nuevo_proveedor_temp_data');
+        }
+    }
+    // --- Fin de funciones sessionStorage ---
+
+
     // Event Listeners
     paisSelect.addEventListener('change', actualizarCiudades);
     personaSelect.addEventListener('change', actualizarBotonEditarPersona);
+    categoriaSearchInput.addEventListener('keyup', filterCategories);
+
+    // Añadir listeners de click a los botones de redirección para guardar el estado del formulario
+    btnEditarPersona.addEventListener('click', saveFormDataToSessionStorage);
+    btnNuevaPersona.addEventListener('click', saveFormDataToSessionStorage);
 
     // Call functions on DOM load to set initial state
     document.addEventListener('DOMContentLoaded', function() {
+        // Primero intenta cargar datos de sessionStorage (si se regresa de otra página)
+        loadFormDataFromSessionStorage();
+
+        // Luego, si no se cargaron datos de sessionStorage o si solo es la carga inicial,
+        // asegura que los dropdowns dependientes y botones se inicialicen correctamente.
+        // La persona_id_selected de PHP (que podría venir de GET) tiene prioridad sobre sessionStorage aquí,
+        // pero sessionStorage ya la habría manejado si estaba presente.
         if (paisSelect.value !== '') {
             actualizarCiudades();
         } else {
-            // Asegura que al cargar la página si no hay país seleccionado, el select de ciudad muestre el mensaje correcto
             ciudadSelect.innerHTML = '<option value="">Seleccione un país primero</option>';
         }
-        actualizarBotonEditarPersona(); // Llama a la función para establecer el estado inicial del botón
-                                      // Esto asegura que el texto se muestre correctamente al cargar la página
-                                      // si ya hay una persona seleccionada por PHP.
-
+        actualizarBotonEditarPersona(); 
+        
         // Dark mode logic
         const body = document.body;
         if (localStorage.getItem('darkMode') === 'enabled') {

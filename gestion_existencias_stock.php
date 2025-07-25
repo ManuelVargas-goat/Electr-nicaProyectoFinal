@@ -21,9 +21,20 @@ $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
 $nombreCompleto = htmlspecialchars($datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno']);
 $rolUsuario = strtolower(htmlspecialchars($datosUsuario['rol']));
 
+// --- Obtener todas las categorías para el SELECT ---
+$sql_categorias = "SELECT DISTINCT nombre FROM categoria ORDER BY nombre";
+try {
+    $stmt_categorias = $pdo->query($sql_categorias);
+    $categorias = $stmt_categorias->fetchAll(PDO::FETCH_COLUMN, 0);
+} catch (PDOException $e) {
+    error_log("Error al cargar categorías: " . $e->getMessage());
+    $categorias = []; // Asegura que $categorias sea un array vacío si falla
+}
+
+
 // Filtro por nombre o categoría
 $filtroNombre = $_GET['nombre'] ?? '';
-$filtroCategoria = $_GET['categoria'] ?? '';
+$filtroCategoria = $_GET['categoria'] ?? ''; // Ahora vendrá del <select>
 
 $where = [];
 $params = [];
@@ -32,50 +43,52 @@ if (!empty($filtroNombre)) {
     $where[] = "p.nombre ILIKE :nombre";
     $params[':nombre'] = "%$filtroNombre%";
 }
+// La diferencia aquí: si filtroCategoria NO está vacío (es decir, se seleccionó algo)
+// se añade a la cláusula WHERE. Si está vacío o es la opción por defecto, no filtra por categoría.
 if (!empty($filtroCategoria)) {
-    $where[] = "c.nombre ILIKE :categoria";
-    $params[':categoria'] = "%$filtroCategoria%";
+    $where[] = "c.nombre = :categoria"; // Usamos '=' en lugar de ILIKE para una selección exacta
+    $params[':categoria'] = $filtroCategoria;
 }
 
 $whereClause = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $sql = "
 SELECT p.producto_id,
-       p.nombre,
-       p.marca,
-       c.nombre AS categoria,
-       (
-         -- ENTRADAS
-         COALESCE((
-           SELECT SUM(dp.cantidad)
-           FROM detalle_pedido dp
-           JOIN pedido ped ON ped.pedido_id = dp.pedido_id
-           WHERE dp.producto_id = p.producto_id AND ped.estado = 'entregado'
-         ), 0)
-         +
-         COALESCE((
-           SELECT SUM(dd.cantidad)
-           FROM detalle_devolucion dd
-           JOIN devolucion dv ON dv.devolucion_id = dd.devolucion_id
-           WHERE dd.producto_id = p.producto_id AND dv.tipo = 'cliente' AND dd.reingresado_stock IS TRUE
-         ), 0)
-         -- SALIDAS
-         -
-         COALESCE((
-           SELECT SUM(dc.cantidad)
-           FROM detalle_compra dc
-           JOIN compra co ON dc.compra_id = co.compra_id -- Alias 'co' para evitar conflicto con 'c' de categoria
-           JOIN estado es ON co.estado_id = es.estado_id
-           WHERE dc.producto_id = p.producto_id AND es.nombre = 'confirmado'
-         ), 0)
-         -
-         COALESCE((
-           SELECT SUM(dd2.cantidad)
-           FROM detalle_devolucion dd2
-           JOIN devolucion dv2 ON dv2.devolucion_id = dd2.devolucion_id
-           WHERE dd2.producto_id = p.producto_id AND dv2.tipo = 'proveedor'
-         ), 0)
-       ) AS stock_disponible
+        p.nombre,
+        p.marca,
+        c.nombre AS categoria,
+        (
+           -- ENTRADAS
+           COALESCE((
+            SELECT SUM(dp.cantidad)
+            FROM detalle_pedido dp
+            JOIN pedido ped ON ped.pedido_id = dp.pedido_id
+            WHERE dp.producto_id = p.producto_id AND ped.estado = 'entregado'
+           ), 0)
+           +
+           COALESCE((
+            SELECT SUM(dd.cantidad)
+            FROM detalle_devolucion dd
+            JOIN devolucion dv ON dv.devolucion_id = dd.devolucion_id
+            WHERE dd.producto_id = p.producto_id AND dv.tipo = 'cliente' AND dd.reingresado_stock IS TRUE
+           ), 0)
+           -- SALIDAS
+           -
+           COALESCE((
+            SELECT SUM(dc.cantidad)
+            FROM detalle_compra dc
+            JOIN compra co ON dc.compra_id = co.compra_id
+            JOIN estado es ON co.estado_id = es.estado_id
+            WHERE dc.producto_id = p.producto_id AND es.nombre = 'confirmado'
+           ), 0)
+           -
+           COALESCE((
+            SELECT SUM(dd2.cantidad)
+            FROM detalle_devolucion dd2
+            JOIN devolucion dv2 ON dv2.devolucion_id = dd2.devolucion_id
+            WHERE dd2.producto_id = p.producto_id AND dv2.tipo = 'proveedor'
+           ), 0)
+        ) AS stock_disponible
 FROM producto p
 LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
 $whereClause
@@ -83,11 +96,15 @@ ORDER BY p.producto_id DESC
 ";
 
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$productos = $stmt->fetchAll();
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error en consulta de productos en gestion_existencias_stock.php: " . $e->getMessage());
+    $productos = [];
+}
 
-// Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 ?>
 
@@ -237,11 +254,11 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 <a href="gestion_catalogo_proveedores.php"
                    class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
             </div>
-            
+
             <a href="gestion_usuarios.php"
                class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
-            
-            <a href="#" id="existenciasToggle" 
+
+            <a href="#" id="existenciasToggle"
                class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
             <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
                 <a href="gestion_existencias_pedidos.php"
@@ -253,7 +270,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 <a href="gestion_existencias_stock.php"
                    class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
             </div>
-            
+
             <a href="configuracion.php"
                class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
 
@@ -270,23 +287,31 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                     <input type="text" name="nombre" value="<?= htmlspecialchars($filtroNombre) ?>" class="form-control" placeholder="Buscar por nombre">
                 </div>
                 <div class="col-md-4">
-                    <input type="text" name="categoria" value="<?= htmlspecialchars($filtroCategoria) ?>" class="form-control" placeholder="Buscar por categoría">
+                    <select name="categoria" class="form-select">
+                        <option value="">Todas las Categorías</option> <?php foreach ($categorias as $cat): ?>
+                            <option value="<?= htmlspecialchars($cat) ?>"
+                                <?= ($cat === $filtroCategoria) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cat) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <div class="col-md-4">
-                    <button class="btn btn-primary w-100">Buscar</button>
+                <div class="col-md-4 d-flex"> <button class="btn btn-primary flex-grow-1 me-2" type="submit">Buscar</button>
+                    <button class="btn btn-secondary" type="button" id="clearFilters">Limpiar</button>
                 </div>
             </form>
 
             <div class="table-responsive">
                 <table class="table table-bordered table-hover text-center">
-                    <thead class=""> <tr>
-                                <th>ID</th>
-                                <th>Nombre</th>
-                                <th>Marca</th>
-                                <th>Categoría</th>
-                                <th>Stock Disponible</th>
-                                <th>Acción</th>
-                            </tr>
+                    <thead class="">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Marca</th>
+                            <th>Categoría</th>
+                            <th>Stock Disponible</th>
+                            <th>Acción</th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php if (!empty($productos)): ?>
@@ -336,7 +361,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 }
             });
         }
-        
+
         // Lógica para el submenú de "Gestión de Existencias"
         const existenciasToggle = document.getElementById('existenciasToggle');
         const existenciasSubmenu = document.getElementById('existenciasSubmenu');
@@ -345,7 +370,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
              existenciasSubmenu.classList.add('active');
         }
-        
+
         if (existenciasToggle) {
              existenciasToggle.addEventListener('click', function(e) {
                  e.preventDefault();
@@ -353,6 +378,19 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                      existenciasSubmenu.classList.toggle('active');
                  }
              });
+        }
+
+        // --- Lógica: Botón Limpiar Filtros ---
+        const clearFiltersButton = document.getElementById('clearFilters');
+        if (clearFiltersButton) {
+            clearFiltersButton.addEventListener('click', function() {
+                // Limpia el campo de nombre
+                document.querySelector('input[name="nombre"]').value = '';
+                // Selecciona la primera opción (vacía) del select de categoría
+                document.querySelector('select[name="categoria"]').value = '';
+                // Envía el formulario para aplicar los filtros vacíos (mostrar todo)
+                this.closest('form').submit();
+            });
         }
     });
 </script>

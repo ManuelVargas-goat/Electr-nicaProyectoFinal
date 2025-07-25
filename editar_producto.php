@@ -8,7 +8,7 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
-// Obtener datos del usuario logueado para el sidebar (aunque no se mostrará, la lógica aún puede necesitar estos datos si se reutiliza)
+// Obtener datos del usuario logueado para el sidebar (si es necesario en el layout completo)
 $usuario_actual = $_SESSION['usuario'];
 $stmt_user = $pdo->prepare("SELECT per.nombre, per.apellido_paterno, r.nombre AS rol FROM usuario_empleado ue JOIN persona per ON ue.persona_id = per.persona_id JOIN rol r ON ue.rol_id = r.rol_id WHERE ue.usuario = :usuario");
 $stmt_user->execute([':usuario' => $usuario_actual]);
@@ -33,20 +33,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['producto_id'])) {
     $producto_id = $_POST['producto_id']; // Si es POST, toma el ID del campo oculto
 }
 
+// Validar que el ID del producto sea un entero válido
 if (!filter_var($producto_id, FILTER_VALIDATE_INT)) {
-    header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("ID de producto no válido para editar.") . "&tipo=danger");
+    $_SESSION['modal_message'] = "ID de producto no válido para editar.";
+    $_SESSION['modal_type'] = "danger";
+    header("Location: gestion_catalogo_productos.php");
     exit();
 }
 
 try {
-    // 3. Si es una solicitud GET o si es POST pero se necesita recargar el formulario después de un error
-    //    Obtener los datos del producto para mostrarlos en el formulario
-    $stmt = $pdo->prepare("SELECT producto_id, nombre, descripcion, precio, marca, descontinuado, categoria_id, ruta_imagen as imagen FROM producto WHERE producto_id = :id");
+    // 3. Obtener los datos actuales del producto para mostrar en el formulario
+    $stmt = $pdo->prepare("SELECT producto_id, nombre, descripcion, precio, marca, descontinuado, categoria_id, ruta_imagen FROM producto WHERE producto_id = :id");
     $stmt->execute([':id' => $producto_id]);
     $producto = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$producto) {
-        header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("Producto no encontrado.") . "&tipo=danger");
+        $_SESSION['modal_message'] = "Producto no encontrado.";
+        $_SESSION['modal_type'] = "danger";
+        header("Location: gestion_catalogo_productos.php");
         exit();
     }
 
@@ -62,10 +66,12 @@ try {
         $marca = trim($_POST['marca'] ?? '');
         $categoria_id = filter_var($_POST['categoria_id'] ?? '', FILTER_VALIDATE_INT);
         $descontinuado = isset($_POST['descontinuado']) ? 1 : 0; 
-        $temp_imagen = $_FILES['imagen']['tmp_name'];
+        
         $directorio = 'ecommerce/imgs/';
+        $rutaimagen = $producto['ruta_imagen']; // Por defecto, mantener la imagen existente
         $errores = [];
 
+        // Validaciones de campos
         if (empty($nombre)) {
             $errores[] = "El nombre del producto es obligatorio.";
         }
@@ -81,20 +87,43 @@ try {
         if ($categoria_id === false || $categoria_id <= 0) {
             $errores[] = "Debe seleccionar una categoría válida.";
         }
-        if (empty($temp_imagen)) {
-            $rutaimagen = $producto['imagen'];
-        } elseif ($_FILES['imagen']['type'] != 'image/png'){
-            $errores[] = "La imagen no es de tipo png.";
-        } 
+
+        // Manejo de la carga de la nueva imagen (si se seleccionó una)
+        if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
+            $ext = pathinfo($_FILES['imagen']['name'], PATHINFO_EXTENSION);
+            $allowed_ext = ['png', 'jpg', 'jpeg', 'gif'];
+            $max_size = 500 * 1024; // 500 KB
+
+            $check = getimagesize($_FILES['imagen']['tmp_name']);
+            if($check === false) {
+                $errores[] = "El archivo subido no es una imagen válida.";
+            } elseif ($_FILES['imagen']['size'] > $max_size) {
+                $errores[] = "La imagen es demasiado grande (máximo 500KB).";
+            } elseif (!in_array(strtolower($ext), $allowed_ext)) {
+                $errores[] = "Tipo de archivo no permitido. Solo se aceptan PNG, JPG, JPEG, GIF.";
+            } else {
+                // Si la nueva imagen es válida, borrar la antigua si existe
+                if (!empty($producto['ruta_imagen']) && file_exists($producto['ruta_imagen'])) {
+                    unlink($producto['ruta_imagen']);
+                }
+                // Generar un nuevo nombre único para la imagen
+                $nombreArchivoImagen = uniqid('prod_edit_', true) . '.' . $ext;
+                $target_file = $directorio . $nombreArchivoImagen;
+
+                if (!move_uploaded_file($_FILES["imagen"]["tmp_name"], $target_file)) {
+                    $errores[] = "Error al subir la nueva imagen. Verifique los permisos de la carpeta 'ecommerce/imgs/'.";
+                } else {
+                    $rutaimagen = $target_file; // Actualizar la ruta de la imagen
+                }
+            }
+        } elseif (isset($_FILES['imagen']) && $_FILES['imagen']['error'] !== UPLOAD_ERR_NO_FILE) {
+            // Manejar otros errores de subida (aparte de no seleccionar archivo)
+            $errores[] = "Error al subir la imagen: Código " . $_FILES['imagen']['error'] . ".";
+        }
 
         if (empty($errores)) {
-            if(!empty($temp_imagen)){
-                unlink($ruta_imagen);
-                $rutaimagen = $directorio . $nombre. ".png";
-                move_uploaded_file($_FILES["imagen"]["tmp_name"],$rutaimagen);
-            }
             // Actualizar el producto en la base de datos
-            $updateStmt = $pdo->prepare("UPDATE producto SET nombre = :nombre, descripcion = :descripcion, precio = :precio, marca = :marca, categoria_id = :categoria_id, descontinuado = :descontinuado,ruta_imagen = :ruta_imagen  WHERE producto_id = :producto_id");
+            $updateStmt = $pdo->prepare("UPDATE producto SET nombre = :nombre, descripcion = :descripcion, precio = :precio, marca = :marca, categoria_id = :categoria_id, descontinuado = :descontinuado, ruta_imagen = :ruta_imagen WHERE producto_id = :producto_id");
             $updateStmt->execute([
                 ':nombre' => $nombre,
                 ':descripcion' => $descripcion,
@@ -102,11 +131,13 @@ try {
                 ':marca' => $marca,
                 ':categoria_id' => $categoria_id,
                 ':descontinuado' => $descontinuado,
-                ':producto_id' => $producto_id,
-                ':ruta_imagen' => $rutaimagen
+                ':ruta_imagen' => $rutaimagen, // Usar la nueva ruta o la existente
+                ':producto_id' => $producto_id
             ]);
 
-            header("Location: gestion_catalogo_productos.php?mensaje=" . urlencode("Producto actualizado con éxito.") . "&tipo=success");
+            $_SESSION['modal_message'] = "Producto actualizado con éxito.";
+            $_SESSION['modal_type'] = "success";
+            header("Location: gestion_catalogo_productos.php");
             exit();
 
         } else {
@@ -116,17 +147,21 @@ try {
             // Para que los datos ingresados persistan en el formulario a pesar del error
             $producto['nombre'] = $nombre;
             $producto['descripcion'] = $descripcion;
-            $producto['precio'] = $_POST['precio']; // Usar el valor original del POST
+            $producto['precio'] = $_POST['precio']; 
             $producto['marca'] = $marca;
             $producto['categoria_id'] = $categoria_id;
             $producto['descontinuado'] = $descontinuado;
+            // La ruta de la imagen se mantiene de $rutaimagen si hubo un problema al subir la nueva
+            $producto['ruta_imagen'] = $rutaimagen; 
         }
     }
 
 } catch (PDOException $e) {
     error_log("Error en editar_producto.php: " . $e->getMessage());
-    $mensaje = "Error de base de datos: " . $e->getMessage();
-    $tipoMensaje = "danger";
+    $_SESSION['modal_message'] = "Error de base de datos: " . $e->getMessage();
+    $_SESSION['modal_type'] = "danger";
+    header("Location: gestion_catalogo_productos.php"); // Redirigir en caso de error crítico de DB
+    exit();
 }
 ?>
 
@@ -159,7 +194,9 @@ try {
 </head>
 <body>
 <div class="container-fluid">
-    <div class="row justify-content-center"> <div class="col-md-8 content"> <h3 class="main-title mb-4 text-center">Editar Producto</h3>
+    <div class="row justify-content-center"> 
+        <div class="col-md-8 content"> 
+            <h3 class="main-title mb-4 text-center">Editar Producto</h3>
 
             <?php if (!empty($mensaje)): ?>
                 <div class="alert alert-<?= htmlspecialchars($tipoMensaje) ?> alert-dismissible fade show" role="alert">
@@ -213,22 +250,19 @@ try {
                     </div>
 
                     <div class="mb-3">
-                        <label for="imagen" class="form-label">Imagen</label>
-                        <input type="file" name="imagen" id="imagen" class="form-control" >                      
+                        <label for="imagen" class="form-label">Cambiar Imagen (PNG, JPG, JPEG, GIF - Max 500KB)</label>
+                        <input type="file" name="imagen" id="imagen" class="form-control"> 
                     </div>
 
                     <div class="mb-3">
-
-                        <?php if (!empty($producto['imagen']) && file_exists($producto['imagen'])): ?>
-                            <img src="<?php echo $producto['imagen']; ?>" alt="Imagen del producto" width="200">
+                        <p>Imagen actual:</p>
+                        <?php if (!empty($producto['ruta_imagen']) && file_exists($producto['ruta_imagen'])): ?>
+                            <img src="<?php echo htmlspecialchars($producto['ruta_imagen']); ?>" alt="Imagen del producto" width="200">
                         <?php else: ?>
-                            <p>No hay imagen cargada</p>
+                            <p>No hay imagen cargada o la ruta es incorrecta.</p>
                         <?php endif; ?>
-
                     </div>
                         
-                        
-
                     <div class="d-flex justify-content-end mt-4">
                         <a href="gestion_catalogo_productos.php" class="btn btn-secondary me-2">Cancelar</a>
                         <button type="submit" class="btn btn-primary">Guardar Cambios</button>
