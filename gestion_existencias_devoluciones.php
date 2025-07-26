@@ -31,10 +31,10 @@ $datosUsuario = $stmtUser->fetch(PDO::FETCH_ASSOC); // Fetch como array asociati
 
 // Asignar valores
 $nombreCompleto = 'Usuario Desconocido'; // Valor predeterminado
-$rol = ''; // Valor predeterminado
+$rolUsuario = ''; // Variable de rol cambiada a $rolUsuario para consistencia
 if ($datosUsuario) {
     $nombreCompleto = htmlspecialchars($datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno']);
-    $rol = strtolower(htmlspecialchars($datosUsuario['rol']));
+    $rolUsuario = strtolower(htmlspecialchars($datosUsuario['rol']));
 }
 
 // **LÓGICA PARA MOSTRAR MENSAJES EN ALERTAS DE BOOTSTRAP**
@@ -392,40 +392,44 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             <div class="user-box text-center mb-4">
                 <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Usuario" class="img-fluid rounded-circle mb-2" style="width: 64px;">
                 <div class="fw-bold"><?= $nombreCompleto ?></div>
-                <div class="<?= ($rol === 'admin') ? 'text-warning' : 'text-light' ?> small">
-                    <?= ucfirst($rol === 'admin' ? 'administrador' : $rol) ?>
+                <div class="<?= ($rolUsuario === 'admin') ? 'text-warning' : 'text-light' ?> small">
+                    <?= ucfirst($rolUsuario === 'admin' ? 'administrador' : $rolUsuario) ?>
                 </div>
             </div>
 
-            <a href="#" id="catalogoToggle"
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
-                <a href="gestion_catalogo_categorias.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
-                <a href="gestion_catalogo_productos.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
-                <a href="gestion_catalogo_proveedores.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
-            </div>
+            <?php if ($rolUsuario === 'admin'): // Solo para administradores ?>
+                <a href="#" id="catalogoToggle"
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                    <a href="gestion_catalogo_categorias.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                    <a href="gestion_catalogo_productos.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                    <a href="gestion_catalogo_proveedores.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
+                </div>
+                
+                <a href="gestion_usuarios.php"
+                   class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            <?php endif; ?>
             
-            <a href="gestion_usuarios.php"
-               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
-            
-            <a href="#" id="existenciasToggle" 
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
-                <a href="gestion_existencias_pedidos.php"
-                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
-                <a href="gestion_existencias_ventas.php"
-                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
-                <a href="gestion_existencias_devoluciones.php"
-                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
-                <a href="gestion_existencias_stock.php"
-                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
-            </div>
-            
-            <a href="configuracion.php"
-               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php if ($rolUsuario === 'admin' || $rolUsuario === 'empleado'): // Para administradores y empleados ?>
+                <a href="#" id="existenciasToggle" 
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                    <a href="gestion_existencias_pedidos.php"
+                       class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                    <a href="gestion_existencias_ventas.php"
+                       class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                    <a href="gestion_existencias_devoluciones.php"
+                       class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                    <a href="gestion_existencias_stock.php"
+                       class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+                </div>
+                
+                <a href="configuracion.php"
+                   class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php endif; ?>
 
             <div class="mt-4 text-center">
                 <a href="principal.php" class="btn btn-outline-primary w-100">Volver al Inicio</a>

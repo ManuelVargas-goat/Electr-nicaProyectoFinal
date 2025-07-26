@@ -5,7 +5,7 @@ include("config.php"); // Asegúrate de que este archivo contenga tu conexión P
 // --- Constantes ---
 define('PEDIDO_ESTADO_ENTREGADO', 'entregado');
 define('PEDIDO_ESTADO_CANCELADO', 'cancelado');
-define('PEDIDO_ESTADO_PENDIENTE', 'pendiente'); // Ya definida, pero la mantengo para claridad
+define('PEDIDO_ESTADO_PENDIENTE', 'pendiente');
 
 define('ALERT_SUCCESS', 'success');
 define('ALERT_DANGER', 'danger');
@@ -20,14 +20,11 @@ if (!isset($_SESSION['usuario'])) {
 
 // Obtener datos del usuario actual
 $usuario = $_SESSION['usuario'];
-// Se cambió 'usuario_empleado_id' por 'ue.usuario_id' para consistencia con un posible 'usuario_id' en la tabla 'usuario_empleado'
-// Si 'usuario' en 'usuario_empleado' es una columna VARCHAR directamente, entonces la consulta original estaba bien.
-// Asumiendo que 'usuario' es el campo por el que se busca, y que es único.
 $sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
                 FROM usuario_empleado ue
                 JOIN persona per ON ue.persona_id = per.persona_id
                 JOIN rol r ON ue.rol_id = r.rol_id
-                WHERE ue.usuario = :usuario"; // Si 'usuario' es un ID numérico, cambia a ue.usuario_id = :usuario
+                WHERE ue.usuario = :usuario";
 $stmt = $pdo->prepare($sql_usuario);
 $stmt->execute([':usuario' => $usuario]);
 $datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -207,12 +204,12 @@ $sql = "
       TO_CHAR(p.fecha_confirmacion, 'HH24:MI:SS') AS hora_recepcion_solo,
       p.estado,
       COALESCE(per.nombre || ' ' || per.apellido_paterno, 'N/A') AS empleado,
-      SUM(dp.cantidad * COALESCE(dp.precio_unidad, pr.precio)) AS total_precio, -- Usar COALESCE para manejar precio_unidad = 0 o NULL
+      SUM(dp.cantidad * COALESCE(dp.precio_unidad, pr.precio)) AS total_precio,
       SUM(dp.cantidad) AS total_cantidad,
       json_agg(json_build_object(
         'producto', pr.nombre,
         'cantidad', dp.cantidad,
-        'precio_unitario', COALESCE(dp.precio_unidad, pr.precio) -- Usar COALESCE aquí también
+        'precio_unitario', COALESCE(dp.precio_unidad, pr.precio)
       )) AS productos
     FROM pedido p
     JOIN detalle_pedido dp ON p.pedido_id = dp.pedido_id
@@ -230,7 +227,7 @@ try {
     $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Error al cargar pedidos: " . $e->getMessage());
-    $resultado = []; // Asegura que $resultado esté definido incluso en caso de error
+    $resultado = [];
     $mensaje = "Error al cargar los pedidos: " . $e->getMessage();
     $tipoMensaje = ALERT_DANGER;
 }
@@ -386,35 +383,39 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 </div>
             </div>
 
-            <a href="#" id="catalogoToggle"
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
-                <a href="gestion_catalogo_categorias.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
-                <a href="gestion_catalogo_productos.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
-                <a href="gestion_catalogo_proveedores.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
-            </div>
+            <?php if ($rolUsuario === 'admin'): // Solo para administradores ?>
+                <a href="#" id="catalogoToggle"
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                    <a href="gestion_catalogo_categorias.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                    <a href="gestion_catalogo_productos.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                    <a href="gestion_catalogo_proveedores.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
+                </div>
+                
+                <a href="gestion_usuarios.php"
+                   class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            <?php endif; ?>
             
-            <a href="gestion_usuarios.php"
-               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
-            
-            <a href="#" id="existenciasToggle" 
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
-                <a href="gestion_existencias_pedidos.php"
-                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
-                <a href="gestion_existencias_ventas.php"
-                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
-                <a href="gestion_existencias_devoluciones.php"
-                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
-                <a href="gestion_existencias_stock.php"
-                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
-            </div>
-            
-            <a href="configuracion.php"
-               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php if ($rolUsuario === 'admin' || $rolUsuario === 'empleado'): // Para administradores y empleados ?>
+                <a href="#" id="existenciasToggle" 
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                    <a href="gestion_existencias_pedidos.php"
+                       class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                    <a href="gestion_existencias_ventas.php"
+                       class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                    <a href="gestion_existencias_devoluciones.php"
+                       class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                    <a href="gestion_existencias_stock.php"
+                       class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+                </div>
+                
+                <a href="configuracion.php"
+                   class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php endif; ?>
 
             <div class="mt-4 text-center">
                 <a href="principal.php" class="btn btn-outline-primary w-100">Volver al Inicio</a>

@@ -58,8 +58,8 @@ SELECT p.producto_id,
         p.nombre,
         p.marca,
         c.nombre AS categoria,
-        s.cantidad AS stock_disponible -- Obtenemos el stock directamente de la tabla 'stock'
-        -- s.fecha_ultima_entrada          -- Columna eliminada según tu solicitud
+        s.cantidad AS stock_disponible, -- Obtenemos el stock directamente de la tabla 'stock'
+        s.fecha_ultima_entrada          -- Columna incluida para evitar el 'Undefined array key'
 FROM producto p
 LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
 JOIN stock s ON p.producto_id = s.producto_id -- Unimos con la tabla stock para obtener la cantidad
@@ -216,35 +216,39 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                 </div>
             </div>
 
-            <a href="#" id="catalogoToggle"
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
-                <a href="gestion_catalogo_categorias.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
-                <a href="gestion_catalogo_productos.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
-                <a href="gestion_catalogo_proveedores.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
-            </div>
+            <?php if ($rolUsuario === 'admin'): // Solo para administradores ?>
+                <a href="#" id="catalogoToggle"
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                    <a href="gestion_catalogo_categorias.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                    <a href="gestion_catalogo_productos.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                    <a href="gestion_catalogo_proveedores.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
+                </div>
 
-            <a href="gestion_usuarios.php"
-               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+                <a href="gestion_usuarios.php"
+                   class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            <?php endif; ?>
 
-            <a href="#" id="existenciasToggle"
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
-                <a href="gestion_existencias_pedidos.php"
-                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
-                <a href="gestion_existencias_ventas.php"
-                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
-                <a href="gestion_existencias_devoluciones.php"
-                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
-                <a href="gestion_existencias_stock.php"
-                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
-            </div>
+            <?php if ($rolUsuario === 'admin' || $rolUsuario === 'empleado'): // Para administradores y empleados ?>
+                <a href="#" id="existenciasToggle"
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                    <a href="gestion_existencias_pedidos.php"
+                       class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                    <a href="gestion_existencias_ventas.php"
+                       class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                    <a href="gestion_existencias_devoluciones.php"
+                       class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                    <a href="gestion_existencias_stock.php"
+                       class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+                </div>
 
-            <a href="configuracion.php"
-               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+                <a href="configuracion.php"
+                   class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php endif; ?>
 
             <div class="mt-4 text-center">
                 <a href="principal.php" class="btn btn-outline-primary w-100">Volver al Inicio</a>
@@ -282,7 +286,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <th>Marca</th>
                             <th>Categoría</th>
                             <th>Stock Disponible</th>
-                            <!-- <th>Última Actualización</th> Columna eliminada -->
+                            <th>Última Actualización</th> <!-- Columna descomentada -->
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -297,7 +301,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                     <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
                                         <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : htmlspecialchars($producto['stock_disponible']) ?>
                                     </td>
-                                    <!-- <td><?= htmlspecialchars($producto['fecha_ultima_entrada'] ? date('Y-m-d H:i', strtotime($producto['fecha_ultima_entrada'])) : 'N/A') ?></td> Columna eliminada -->
+                                    <td><?= htmlspecialchars($producto['fecha_ultima_entrada'] ? date('Y-m-d H:i', strtotime($producto['fecha_ultima_entrada'])) : 'N/A') ?></td> <!-- Columna descomentada -->
                                     <td>
                                         <a href="detalle_stock.php?producto_id=<?= htmlspecialchars($producto['producto_id']) ?>" class="btn btn-sm btn-info">Ver detalles</a>
                                     </td>
@@ -305,7 +309,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="6" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
+                                <td colspan="7" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -342,16 +346,16 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
         // Abre el submenú de existencias si alguna de sus sub-páginas está activa
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
-             existenciasSubmenu.classList.add('active');
+            existenciasSubmenu.classList.add('active');
         }
 
         if (existenciasToggle) {
-             existenciasToggle.addEventListener('click', function(e) {
-                 e.preventDefault();
-                 if (existenciasSubmenu) {
-                     existenciasSubmenu.classList.toggle('active');
-                 }
-             });
+            existenciasToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (existenciasSubmenu) {
+                    existenciasSubmenu.classList.toggle('active');
+                }
+            });
         }
 
         // --- Lógica: Botón Limpiar Filtros ---

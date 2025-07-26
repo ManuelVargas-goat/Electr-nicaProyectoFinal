@@ -6,7 +6,7 @@ define('DB_HOST', 'localhost');
 define('DB_NAME', 'TiendaElectro');
 define('DB_USER', 'juan');
 define('DB_PASSWORD', '123');
-define('DB_PORT', '5555'); // Puerto de PostgreSQL (se asume que es 5555 o el que estés usando)
+define('DB_PORT', '5432'); // Puerto de PostgreSQL (debe coincidir con tu configuración real)
 
 $conn = null;
 try {
@@ -15,25 +15,23 @@ try {
     $conn->exec("SET NAMES 'UTF8'");
 } catch (PDOException $e) {
     error_log("Error de conexión a la base de datos en finalizar_compra.php: " . $e->getMessage());
-    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
+    // Muestra el mensaje de error detallado para depuración
+    die("Error al conectar con la base de datos: " . $e->getMessage());
 }
 
 $message = ''; // Mensaje para notificaciones
 $is_payment_successful = false;
 
-// --- Inicializar el carrito en la sesión si no existe (AÑADIDO PARA RESOLVER EL ERROR) ---
+// --- Inicializar el carrito en la sesión si no existe ---
 if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
 // --- 1. Verificar si hay una sesión de cliente iniciada ---
-// Suponemos que 'usuario_cliente_id' se guarda en la sesión al iniciar sesión.
-// Si no tienes un sistema de login aún, puedes simularlo o crear uno básico.
 $usuario_cliente_id = isset($_SESSION['usuario_cliente_id']) ? intval($_SESSION['usuario_cliente_id']) : 0;
 
 if ($usuario_cliente_id === 0) {
     // Si no hay sesión de cliente, redirigir a la página de login
-    // NOTA: Debes crear o tener una página 'login.php' que establezca $_SESSION['usuario_cliente_id'] al iniciar sesión.
     header('Location: login.php?redirect_to=finalizar_compra.php');
     exit();
 }
@@ -73,8 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_payment'])) {
 
             // Insertar detalle de compra
             $stmt_insert_detalle = $conn->prepare("INSERT INTO detalle_compra (compra_id, producto_id, cantidad, precio_unitario, descuento) VALUES (?, ?, ?, ?, ?)");
-            // Asumimos proveedor_id puede ser NULL o se determinará más tarde.
-            // Para este ejemplo, no estamos rastreando el proveedor en detalle_compra desde el carrito.
             $stmt_insert_detalle->execute([$compra_id, $product_id, $quantity_in_cart, $item['price'], 0]); // Descuento 0 por defecto
 
             // Actualizar stock
@@ -84,8 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_payment'])) {
 
         $conn->commit(); // Confirmar la transacción
         $is_payment_successful = true;
-        $message = "¡Pago realizado con éxito! Tu pedido ha sido registrado.";
+        // REDIRECCIÓN INMEDIATA DESPUÉS DE UNA COMPRA EXITOSA
+        header('Location: inicio_Principal.php?msg=' . urlencode('¡Pago realizado con éxito! Tu pedido ha sido registrado.'));
         unset($_SESSION['cart']); // Vaciar el carrito después de la compra exitosa
+        exit(); // Terminar la ejecución del script aquí
 
     } catch (Exception $e) {
         $conn->rollBack(); // Revertir la transacción en caso de error
@@ -94,13 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_payment'])) {
     }
 }
 
-// Calcular el total del carrito para mostrar en la página
+// Calcular el total del carrito para mostrar en la página (solo si no se redirigió)
 $subtotal = 0;
 $cart_item_count = 0;
-// Aquí ya no debería haber problemas con $_SESSION['cart']
-foreach ($_SESSION['cart'] as $id => $item) {
-    $subtotal += $item['quantity'] * $item['price'];
-    $cart_item_count += $item['quantity'];
+// Asegurarse de que $_SESSION['cart'] esté definido antes de iterar
+if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
+    foreach ($_SESSION['cart'] as $id => $item) {
+        $subtotal += $item['quantity'] * $item['price'];
+        $cart_item_count += $item['quantity'];
+    }
 }
 $shipping_cost = $subtotal > 0 ? 15.00 : 0;
 $total = $subtotal + $shipping_cost;
