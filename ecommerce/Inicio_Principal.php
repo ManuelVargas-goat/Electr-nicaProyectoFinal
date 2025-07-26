@@ -74,64 +74,51 @@ if ($is_logged_in) {
 ?>
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mi Tienda de Electrónica - Estilo Amazon</title>
     <!-- Bootstrap CSS CDN -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
-        crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     <!-- Font Awesome para iconos (opcional, pero útil para un look más completo) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom CSS -->
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #eaeded;
-            /* Light gray background, similar to Amazon */
+            background-color: #eaeded; /* Light gray background, similar to Amazon */
             color: #111;
         }
-
         .navbar-amazon {
-            background-color: #131921;
-            /* Amazon dark blue/black */
+            background-color: #131921; /* Amazon dark blue/black */
             padding: 0.5rem 1rem;
             color: white;
         }
-
         .navbar-amazon .navbar-brand {
             font-weight: bold;
             font-size: 1.5rem;
             color: white !important;
         }
-
         .navbar-amazon .nav-link,
         .navbar-amazon .form-control {
             color: white !important;
         }
-
         .navbar-amazon .nav-link:hover {
             color: #ddd !important;
         }
-
         .navbar-amazon .search-bar {
             flex-grow: 1;
             margin: 0 15px;
             max-width: 600px;
         }
-
         .navbar-amazon .search-input {
             border-radius: 5px 0 0 5px;
             border: none;
             padding: 0.5rem 1rem;
             height: 40px;
         }
-
         .navbar-amazon .search-button {
-            background-color: #febd69;
-            /* Amazon orange */
+            background-color: #febd69; /* Amazon orange */
             border-radius: 0 5px 5px 0;
             border: none;
             color: #111;
@@ -139,45 +126,35 @@ if ($is_logged_in) {
             height: 40px;
             cursor: pointer;
         }
-
         .navbar-amazon .search-button:hover {
             background-color: #f7a847;
         }
-
         .navbar-amazon .nav-item .dropdown-toggle::after {
-            display: none;
-            /* Hide default caret for Amazon style */
+            display: none; /* Hide default caret for Amazon style */
         }
-
         .navbar-amazon .nav-item .dropdown-menu {
             background-color: #131921;
             border: 1px solid #333;
         }
-
         .navbar-amazon .nav-item .dropdown-item {
             color: white;
         }
-
         .navbar-amazon .nav-item .dropdown-item:hover {
             background-color: #333;
         }
 
         /* Secondary Navbar */
         .navbar-secondary {
-            background-color: #232f3e;
-            /* Amazon dark gray */
+            background-color: #232f3e; /* Amazon dark gray */
             color: white;
             padding: 0.5rem 1rem;
         }
-
         .navbar-secondary .nav-link {
             color: white !important;
             padding: 0.5rem 1rem;
         }
-
         .navbar-secondary .nav-link:hover {
-            border: 1px solid white;
-            /* Highlight on hover */
+            border: 1px solid white; /* Highlight on hover */
             border-radius: 3px;
         }
 
@@ -186,17 +163,14 @@ if ($is_logged_in) {
             background-color: #232f3e;
             color: white;
         }
-
         .offcanvas-body {
             background-color: #fff;
             color: #111;
         }
-
         .offcanvas-body .list-group-item {
             border: none;
             padding: 10px 15px;
         }
-
         .offcanvas-body .list-group-item:hover {
             background-color: #f0f0f0;
         }
@@ -204,58 +178,45 @@ if ($is_logged_in) {
         /* Product Cards */
         .card {
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
             border: 1px solid #ddd;
         }
-
         .card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, .15);
+            box-shadow: 0 4px 8px rgba(0,0,0,.15);
         }
-
         .card-img-top {
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
             height: 200px;
-            object-fit: contain;
-            /* Use contain to prevent cropping and show full image */
-            padding: 10px;
-            /* Add some padding around the image */
+            object-fit: contain; /* Use contain to prevent cropping and show full image */
+            padding: 10px; /* Add some padding around the image */
         }
-
         .btn-add-to-cart {
-            background-color: #ffd814;
-            /* Amazon yellow */
+            background-color: #ffd814; /* Amazon yellow */
             border-color: #ffd814;
             color: #111;
-            border-radius: 20px;
-            /* More rounded */
+            border-radius: 20px; /* More rounded */
             font-weight: bold;
             transition: background-color 0.2s ease-in-out;
         }
-
         .btn-add-to-cart:hover {
             background-color: #f7ca00;
             border-color: #f7ca00;
             color: #111;
         }
-
         .product-price {
             font-size: 1.4rem;
             font-weight: bold;
-            color: #b12704;
-            /* Amazon red for price */
+            color: #b12704; /* Amazon red for price */
         }
-
         .product-brand {
             font-size: 0.85rem;
             color: #555;
         }
-
         .out-of-stock-badge {
-            background-color: #dc3545;
-            /* Red for out of stock */
+            background-color: #dc3545; /* Red for out of stock */
             color: white;
             padding: 5px 10px;
             border-radius: 5px;
@@ -282,25 +243,21 @@ if ($is_logged_in) {
 
         /* Footer */
         .footer-amazon {
-            background-color: #232f3e;
-            /* Dark gray for footer */
+            background-color: #232f3e; /* Dark gray for footer */
             color: white;
             padding: 40px 0;
             font-size: 0.9rem;
         }
-
         .footer-amazon a {
             color: #ddd;
             text-decoration: none;
             display: block;
             margin-bottom: 5px;
         }
-
         .footer-amazon a:hover {
             text-decoration: underline;
             color: white;
         }
-
         /* Removed .back-to-top styles as per request */
 
         /* Custom Toast Notification */
@@ -308,32 +265,27 @@ if ($is_logged_in) {
             position: fixed;
             top: 20px;
             right: 20px;
-            background-color: #28a745;
-            /* Green for success */
+            background-color: #28a745; /* Green for success */
             color: white;
             padding: 10px 20px;
             border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            z-index: 1050;
-            /* Above Bootstrap modals */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1050; /* Above Bootstrap modals */
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
-
         .custom-toast.show {
             opacity: 1;
         }
     </style>
 </head>
-
 <body>
 
     <!-- Main Navbar (Amazon Style) -->
     <nav class="navbar navbar-expand-lg navbar-amazon sticky-top">
         <div class="container-fluid">
             <!-- Offcanvas Toggle Button -->
-            <button class="btn btn-link text-white me-3" type="button" data-bs-toggle="offcanvas"
-                data-bs-target="#offcanvasMenu" aria-controls="offcanvasMenu">
+            <button class="btn btn-link text-white me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasMenu" aria-controls="offcanvasMenu">
                 <i class="fas fa-bars"></i> Todas
             </button>
 
@@ -343,53 +295,40 @@ if ($is_logged_in) {
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1">
-                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
-                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
-                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
-                    </form>
+            <div class="d-flex flex-grow-1 search-bar">
+                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
+                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
             </div>
-
-
-
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item <?php echo $is_logged_in ? 'dropdown' : ''; ?>">
                         <a class="nav-link <?php echo $is_logged_in ? 'dropdown-toggle' : ''; ?>"
-                            href="<?php echo $is_logged_in ? '#' : 'login.php'; ?>" id="navbarDropdownAccount"
-                            role="button" <?php echo $is_logged_in ? 'data-bs-toggle="dropdown" aria-expanded="false"' : ''; ?>>
+                           href="<?php echo $is_logged_in ? '#' : 'login.php'; ?>"
+                           id="navbarDropdownAccount"
+                           role="button"
+                           <?php echo $is_logged_in ? 'data-bs-toggle="dropdown" aria-expanded="false"' : ''; ?>>
                             Hola, <?php echo $user_display_name; ?> <br> <span class="fw-bold">Cuentas y Listas</span>
                         </a>
                         <?php if ($is_logged_in): ?>
                             <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
                                 <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
                                 <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-<<<<<<< HEAD
-                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li> <!-- MODIFICADO: Redirecciona a deseos.php -->
+                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
                                 <li><hr class="dropdown-divider bg-secondary"></li>
                                 <li><a class="dropdown-item" href="logout.php">Cerrar Sesión</a></li>
-=======
-                                <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
-                                <li>
-                                    <hr class="dropdown-divider bg-secondary">
-                                </li>
-                                <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
->>>>>>> 4fdcde245a18da733038ca063431c9e64f9ee489
                             </ul>
                         <?php endif; ?>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="Reclamo.php">
+                        <a class="nav-link" href="#">
                             Devoluciones <br> <span class="fw-bold">& Pedidos</span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="carritocompras.php" id="cart-link">
                             <i class="fas fa-shopping-cart fa-2x"></i>
-                            <span
-                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark"
-                                id="cart-count"><?php echo $cart_item_count; ?></span>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" id="cart-count"><?php echo $cart_item_count; ?></span>
                             <span class="ms-2">Carrito</span>
                         </a>
                     </li>
@@ -404,7 +343,7 @@ if ($is_logged_in) {
             <ul class="navbar-nav">
                 <?php foreach ($categories as $category): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"><?php echo htmlspecialchars($category['nombre']); ?></a>
+                        <a class="nav-link" href="#"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -414,37 +353,26 @@ if ($is_logged_in) {
     <!-- Offcanvas Menu (Left Sidebar) -->
     <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasMenu" aria-labelledby="offcanvasMenuLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="offcanvasMenuLabel"><i class="fas fa-user-circle me-2"></i> Hola,
-                Identifícate</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                aria-label="Close"></button>
+            <h5 class="offcanvas-title" id="offcanvasMenuLabel"><i class="fas fa-user-circle me-2"></i> Hola, Identifícate</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body">
             <h6 class="text-uppercase fw-bold mb-3">Comprar por Categoría</h6>
             <ul class="list-group list-group-flush">
                 <?php foreach ($categories as $category): ?>
-                    <li class="list-group-item"><a href="#"
-                            class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a>
-                    </li>
+                    <li class="list-group-item"><a href="#" class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a></li>
                 <?php endforeach; ?>
                 <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Ver todo</a></li>
             </ul>
             <hr>
             <h6 class="text-uppercase fw-bold mb-3">Ayuda y Configuración</h6>
             <ul class="list-group list-group-flush">
-<<<<<<< HEAD
                 <li class="list-group-item"><a href="cuenta.php" class="text-decoration-none text-dark">Mi Cuenta</a></li>
                 <li class="list-group-item"><a href="pedidos.php" class="text-decoration-none text-dark">Mis Pedidos</a></li>
-                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li> <!-- MODIFICADO: Redirecciona a deseos.php -->
+                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li>
                 <li class="list-group-item"><a href="#">Servicio al Cliente</a></li>
                 <li class="list-group-item"><a href="#">Idioma</a></li>
                 <li class="list-group-item"><a href="logout.php">Cerrar Sesión</a></li>
-=======
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Mi Cuenta</a></li>
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Servicio al Cliente</a>
-                </li>
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Idioma</a></li>
->>>>>>> 4fdcde245a18da733038ca063431c9e64f9ee489
             </ul>
         </div>
     </div>
@@ -467,11 +395,8 @@ if ($is_logged_in) {
                 <?php foreach ($products as $product): ?>
                     <div class="col">
                         <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top"
-                                alt="<?php echo htmlspecialchars($product['nombre']); ?>"
-                                onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
+                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
                             <div class="card-body d-flex flex-column">
-<<<<<<< HEAD
                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                     <h5 class="card-title mb-0"><?php echo htmlspecialchars($product['nombre']); ?></h5>
                                     <?php
@@ -481,11 +406,6 @@ if ($is_logged_in) {
                                     <i class="heart-icon fa-heart <?php echo $heart_class; ?> fa-lg cursor-pointer" data-product-id="<?php echo htmlspecialchars($product['id']); ?>" title="Añadir a lista de deseos"></i>
                                 </div>
                                 <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?></p>
-=======
-                                <h5 class="card-title"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?>
-                                </p>
->>>>>>> 4fdcde245a18da733038ca063431c9e64f9ee489
                                 <div class="mt-auto">
                                     <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
                                     <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
@@ -498,8 +418,7 @@ if ($is_logged_in) {
                                         <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
                                         <form action="agregar_producto.php" method="POST">
                                             <input type="hidden" name="action" value="add">
-                                            <input type="hidden" name="product_id"
-                                                value="<?php echo htmlspecialchars($product['id']); ?>">
+                                            <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['id']); ?>">
                                             <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
                                             <button type="submit" class="btn btn-add-to-cart w-100">
                                                 Añadir al Carrito
@@ -557,18 +476,10 @@ if ($is_logged_in) {
     </footer>
 
     <!-- Bootstrap JS CDN (Bundle with Popper) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <!-- Custom JavaScript -->
     <script>
-<<<<<<< HEAD
         document.addEventListener('DOMContentLoaded', function() {
-=======
-        document.addEventListener('DOMContentLoaded', function () {
-            // Get the message from PHP (if any) and display toast
-            // The $message variable is not passed from carritocompras.php to this page directly on reload
-            // If you want toast messages from adding to cart, you'd need AJAX for the form submission.
->>>>>>> 4fdcde245a18da733038ca063431c9e64f9ee489
             const customToast = document.getElementById('customToast');
 
             // Function to show toast notifications
@@ -641,5 +552,4 @@ if ($is_logged_in) {
         });
     </script>
 </body>
-
 </html>
