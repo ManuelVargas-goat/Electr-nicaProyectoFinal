@@ -18,7 +18,7 @@ try {
     die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
 }
 
-$login_message = ''; // Mensaje para mostrar al usuario (éxito o error)
+$register_message = ''; // Mensaje para mostrar al usuario (éxito o error)
 
 // --- Obtener categorías para la navegación (similar a otras páginas) ---
 $categories = [];
@@ -38,53 +38,70 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 
-// --- Procesar el formulario de inicio de sesión ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
-    $usuario = trim($_POST['usuario']); // Cambiado de 'email' a 'usuario'
-    $clave = trim($_POST['clave']);     // Cambiado de 'password' a 'clave'
+$mensaje = '';
+$codigo_enviado = false;
 
-    if (empty($usuario) || empty($clave)) {
-        $login_message = "<div class='alert alert-danger text-center' role='alert'>Por favor, ingresa tu usuario y contraseña.</div>";
-    } else {
-        try {
-            // Consulta para verificar las credenciales del usuario
-            // Se usa 'usuario' y 'clave' de la tabla 'usuario_cliente'
-            // NOTA: En un entorno real, la contraseña NUNCA debe almacenarse en texto plano.
-            // Debes usar password_hash() para almacenar y password_verify() para verificar.
-            $stmt = $conn->prepare("SELECT usuario_cliente_id, usuario, clave FROM usuario_cliente WHERE usuario = ?");
-            $stmt->execute([$usuario]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Lógica para verificar el código de verificación (primera etapa del reset)
+    if (isset($_POST['codigo'])) {
+        if (isset($_SESSION['codigo_verificacion']) && $_POST['codigo'] == $_SESSION['codigo_verificacion']) {
+            $_SESSION['codigo_validado'] = true;
+            $mensaje = "✅ Código verificado correctamente. Ahora puedes establecer tu nueva contraseña.";
+        } else {
+            $mensaje = "❌ Código incorrecto.";
+            $_SESSION['codigo_validado'] = false; // Asegurar que no avance si el código es incorrecto
+        }
+    // Lógica para actualizar la contraseña (segunda etapa del reset)
+    } elseif (isset($_POST['nueva_clave'])) {
+        // Solo permitir la actualización si el código fue validado
+        if (!isset($_SESSION['codigo_validado']) || !$_SESSION['codigo_validado']) {
+            $mensaje = "Acceso denegado. El código de verificación no ha sido validado.";
+            // Considera redirigir de vuelta a la página de verificación si no está validado
+            // header("Location: recuperar.php"); 
+            // exit;
+        } elseif ($_POST['nueva_clave'] === $_POST['confirmar_clave']) {
+            $usuario = $_SESSION['usuario_para_reset'] ?? null; // Asegúrate de que este valor esté seteado
 
-            // Simulación de verificación de contraseña (reemplazar con password_verify en producción)
-            if ($user && $clave === $user['clave']) { // ¡¡¡ADVERTENCIA: NO SEGURO PARA PRODUCCIÓN!!!
-            // if ($user && password_verify($clave, $user['clave'])) { // Esto sería lo correcto para producción
-                $_SESSION['usuario_cliente_id'] = $user['usuario_cliente_id'];
-                $_SESSION['user_usuario'] = $user['usuario']; // Opcional: guardar el nombre de usuario
+            if ($usuario) {
 
-                // Redirigir al usuario a la página original o a inicio_Principal.php
-                $redirect_to = isset($_GET['redirect_to']) ? $_GET['redirect_to'] : 'inicio_Principal.php';
-                header('Location: ' . $redirect_to);
-                exit();
+                $nueva_clave_hashed = $_POST['nueva_clave'];
+
+
+                $sql = "UPDATE usuario_cliente SET clave = :clave WHERE usuario = :usuario";
+                $stmt = $conn->prepare($sql);
+                $stmt->execute([
+                    ':clave' => $nueva_clave_hashed, // Guardar la clave encriptada
+                    ':usuario' => $usuario
+                ]);
+
+                // Limpiar sesiones relacionadas con el reset
+                session_unset();
+                session_destroy(); // Destruye toda la sesión
+
+                header("Location: login.php?msg=clave_actualizada");
+                exit;
             } else {
-                $login_message = "<div class='alert alert-danger text-center' role='alert'>Usuario o contraseña incorrectos.</div>";
+                $mensaje = "❌ No se pudo determinar el usuario para actualizar la contraseña. Por favor, reinicie el proceso.";
             }
-        } catch (PDOException $e) {
-            error_log("Error de login: " . $e->getMessage());
-            $login_message = "<div class='alert alert-danger text-center' role='alert'>Error al intentar iniciar sesión. Por favor, inténtalo de nuevo más tarde.</div>";
+        } else {
+            $mensaje = "⚠️ Las contraseñas no coinciden.";
         }
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar Sesión - Mi Tienda de Electrónica</title>
+    <title>Registro - Mi Tienda de Electrónica</title>
     <!-- Bootstrap CSS CDN -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        crossorigin="anonymous">
     <!-- Font Awesome para iconos -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom CSS -->
     <style>
         body {
@@ -92,34 +109,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             background-color: #eaeded;
             color: #111;
         }
+
         .navbar-amazon {
             background-color: #131921;
             padding: 0.5rem 1rem;
             color: white;
         }
+
         .navbar-amazon .navbar-brand {
             font-weight: bold;
             font-size: 1.5rem;
             color: white !important;
         }
+
         .navbar-amazon .nav-link,
         .navbar-amazon .form-control {
             color: white !important;
         }
+
         .navbar-amazon .nav-link:hover {
             color: #ddd !important;
         }
+
         .navbar-amazon .search-bar {
             flex-grow: 1;
             margin: 0 15px;
             max-width: 600px;
         }
+
         .navbar-amazon .search-input {
             border-radius: 5px 0 0 5px;
             border: none;
             padding: 0.5rem 1rem;
             height: 40px;
         }
+
         .navbar-amazon .search-button {
             background-color: #febd69;
             border-radius: 0 5px 5px 0;
@@ -129,71 +153,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             height: 40px;
             cursor: pointer;
         }
+
         .navbar-amazon .search-button:hover {
             background-color: #f7a847;
         }
+
         .navbar-amazon .nav-item .dropdown-toggle::after {
             display: none;
         }
+
         .navbar-amazon .nav-item .dropdown-menu {
             background-color: #131921;
             border: 1px solid #333;
         }
+
         .navbar-amazon .nav-item .dropdown-item {
             color: white;
         }
+
         .navbar-amazon .nav-item .dropdown-item:hover {
             background-color: #333;
         }
+
         .navbar-secondary {
             background-color: #232f3e;
             color: white;
             padding: 0.5rem 1rem;
         }
+
         .navbar-secondary .nav-link {
             color: white !important;
             padding: 0.5rem 1rem;
         }
+
         .navbar-secondary .nav-link:hover {
             border: 1px solid white;
             border-radius: 3px;
         }
+
         .offcanvas-header {
             background-color: #232f3e;
             color: white;
         }
+
         .offcanvas-body {
             background-color: #fff;
             color: #111;
         }
+
         .offcanvas-body .list-group-item {
             border: none;
             padding: 10px 15px;
         }
+
         .offcanvas-body .list-group-item:hover {
             background-color: #f0f0f0;
         }
-        .login-container {
+
+        .olvidar-container {
             background-color: #fff;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
             padding: 30px;
             margin-top: 50px;
             max-width: 400px;
             margin-left: auto;
             margin-right: auto;
         }
-        .login-container h2 {
+
+        .olvidar-container h2 {
             text-align: center;
             margin-bottom: 30px;
             font-weight: bold;
             color: #007bff;
         }
-        .login-container .form-control {
+
+        .olvidar-container .form-control {
             border-radius: 5px;
             padding: 10px;
         }
-        .login-container .btn-login {
+
+        .olvidar-container .btn-login {
             background-color: #f0c14b;
             border-color: #a88734 #9c7e31 #846a29;
             color: #111;
@@ -203,38 +243,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             width: 100%;
             margin-top: 20px;
         }
-        .login-container .btn-login:hover {
+
+        .olvidar-container .btn-login:hover {
             background-color: #e4b93b;
         }
-        .login-container .text-center a {
+
+        .olvidar-container .text-center a {
             color: #007bff;
             text-decoration: none;
         }
-        .login-container .text-center a:hover {
+
+        .olvidar-container .text-center a:hover {
             text-decoration: underline;
         }
+
         .section-title {
             color: #007bff;
             margin-bottom: 40px;
             font-weight: 700;
         }
+
         .footer-amazon {
             background-color: #232f3e;
             color: white;
             padding: 40px 0;
             font-size: 0.9rem;
-            margin-top: 50px; /* Adjust margin to push footer down */
+            margin-top: 50px;
+            /* Adjust margin to push footer down */
         }
+
         .footer-amazon a {
             color: #ddd;
             text-decoration: none;
             display: block;
             margin-bottom: 5px;
         }
+
         .footer-amazon a:hover {
             text-decoration: underline;
             color: white;
         }
+
         .back-to-top {
             background-color: #37475a;
             color: white;
@@ -242,9 +291,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             padding: 15px 0;
             cursor: pointer;
         }
+
         .back-to-top:hover {
             background-color: #485769;
         }
+
         .custom-toast {
             position: fixed;
             top: 20px;
@@ -253,16 +304,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             color: white;
             padding: 10px 20px;
             border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             z-index: 1050;
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
+
         .custom-toast.show {
             opacity: 1;
         }
     </style>
 </head>
+
 <body>
 
     <!-- Back to Top Button -->
@@ -274,7 +327,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <nav class="navbar navbar-expand-lg navbar-amazon sticky-top">
         <div class="container-fluid">
             <!-- Offcanvas Toggle Button -->
-            <button class="btn btn-link text-white me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasMenu" aria-controls="offcanvasMenu">
+            <button class="btn btn-link text-white me-3" type="button" data-bs-toggle="offcanvas"
+                data-bs-target="#offcanvasMenu" aria-controls="offcanvasMenu">
                 <i class="fas fa-bars"></i> Todas
             </button>
 
@@ -285,23 +339,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
             <!-- Search Bar -->
             <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
+                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda"
+                    aria-label="Search">
                 <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownAccount" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownAccount" role="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">
                             Hola, identifícate <br> <span class="fw-bold">Cuentas y Listas</span>
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
-                                <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
-                                <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
-                                <li><hr class="dropdown-divider bg-secondary"></li>
-                                <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
-                            </ul>
+                            <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
+                            <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
+                            <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
+                            <li>
+                                <hr class="dropdown-divider bg-secondary">
+                            </li>
+                            <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar
+                                    Sesión</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#">
@@ -311,7 +370,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                     <li class="nav-item">
                         <a class="nav-link" href="carritocompras.php" id="cart-link">
                             <i class="fas fa-shopping-cart fa-2x"></i>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" id="cart-count"><?php echo $cart_item_count; ?></span>
+                            <span
+                                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark"
+                                id="cart-count"><?php echo $cart_item_count; ?></span>
                             <span class="ms-2">Carrito</span>
                         </a>
                     </li>
@@ -336,14 +397,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <!-- Offcanvas Menu (Left Sidebar) -->
     <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasMenu" aria-labelledby="offcanvasMenuLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="offcanvasMenuLabel"><i class="fas fa-user-circle me-2"></i> Hola, Identifícate</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            <h5 class="offcanvas-title" id="offcanvasMenuLabel"><i class="fas fa-user-circle me-2"></i> Hola,
+                Identifícate</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
+                aria-label="Close"></button>
         </div>
         <div class="offcanvas-body">
             <h6 class="text-uppercase fw-bold mb-3">Comprar por Categoría</h6>
             <ul class="list-group list-group-flush">
                 <?php foreach ($categories as $category): ?>
-                    <li class="list-group-item"><a href="#" class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a></li>
+                    <li class="list-group-item"><a href="#"
+                            class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a>
+                    </li>
                 <?php endforeach; ?>
                 <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Ver todo</a></li>
             </ul>
@@ -351,7 +416,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             <h6 class="text-uppercase fw-bold mb-3">Ayuda y Configuración</h6>
             <ul class="list-group list-group-flush">
                 <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Mi Cuenta</a></li>
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Servicio al Cliente</a></li>
+                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Servicio al Cliente</a>
+                </li>
                 <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Idioma</a></li>
             </ul>
         </div>
@@ -362,25 +428,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
     <!-- Main Content for Login -->
     <main class="container">
-        <div class="login-container">
-            <h2>Iniciar Sesión</h2>
-            <?php echo $login_message; // Muestra mensajes de login ?>
+        <div class="olvidar-container">
 
-            <form action="login.php<?php echo isset($_GET['redirect_to']) ? '?redirect_to=' . urlencode($_GET['redirect_to']) : ''; ?>" method="POST">
-                <div class="mb-3">
-                    <label for="usuario" class="form-label">Usuario</label>
-                    <input type="text" class="form-control" id="usuario" name="usuario" required>
+            <h4 class="mb-4 text-center">Nueva Contraseña</h4>
+
+            <?php if ($mensaje && (!isset($_POST['nueva_clave']) || ($_POST['nueva_clave'] !== $_POST['confirmar_clave']))): ?>
+                <div class="alert alert-warning mt-3"><?= $mensaje ?></div>
+            <?php endif; ?>
+
+            <?php if (isset($_SESSION['codigo_validado']) && $_SESSION['codigo_validado']): ?>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="nueva_clave" class="form-label">Nueva Contraseña:</label>
+                        <input type="password" class="form-control" name="nueva_clave" id="nueva_clave" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmar_clave" class="form-label">Confirmar Nueva Contraseña:</label>
+                        <input type="password" class="form-control" name="confirmar_clave" id="confirmar_clave" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Actualizar Contraseña</button>
+                    </div>
+                </form>
+            <?php elseif (!isset($_POST['codigo']) && (!isset($_SESSION['codigo_validado']) || !$_SESSION['codigo_validado'])): ?>
+                <div class="alert alert-danger">El código de verificación no ha sido validado.
+                    <a href="recuperar_cuenta.php" class="text-info">Volver al inicio del proceso de recuperación</a>.
                 </div>
-                <div class="mb-3">
-                    <label for="clave" class="form-label">Contraseña</label>
-                    <input type="password" class="form-control" id="clave" name="clave" required>
-                </div>
-                <button type="submit" name="login" class="btn btn-login">Iniciar Sesión</button>
-            </form>
-            <div class="text-center mt-3">
-                <p>¿No tienes una cuenta? <a href="registro.php">Regístrate aquí</a></p>
-                <p><a href="olvidar_clave.php">¿Olvidaste tu contraseña?</a></p>
-            </div>
+            <?php endif; ?>
+
+            <?php if ($mensaje && (isset($_POST['nueva_clave']) && $_POST['nueva_clave'] === $_POST['confirmar_clave'])): ?>
+                <div class="alert alert-success mt-3"><?= $mensaje ?></div>
+            <?php endif; ?>
+
         </div>
     </main>
 
@@ -429,10 +508,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     </footer>
 
     <!-- Bootstrap JS CDN (Bundle with Popper) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        crossorigin="anonymous"></script>
     <!-- Custom JavaScript -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Back to Top button functionality
             const backToTopButton = document.querySelector('.back-to-top');
             window.addEventListener('scroll', () => {
@@ -445,4 +525,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         });
     </script>
 </body>
+
 </html>

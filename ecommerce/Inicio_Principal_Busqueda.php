@@ -113,6 +113,13 @@ $stmt->execute($params);
 $productos = $stmt->fetchAll();
 
 
+// Logica para cerrar sesión
+if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
+    $_SESSION = array(); // Limpiar variables de sesión
+    session_destroy();
+    header("Location: Inicio_Principal.php");
+    exit();
+}
 
 
 ?>
@@ -394,11 +401,11 @@ $productos = $stmt->fetchAll();
                             <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
                                 <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
                                 <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-                                <li><a class="dropdown-item" href="#">Mi Lista de Deseos</a></li>
+                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
                                 <li>
                                     <hr class="dropdown-divider bg-secondary">
                                 </li>
-                                <li><a class="dropdown-item" href="#">Cerrar Sesión</a></li>
+                                <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
                             </ul>
                         <?php endif; ?>
                     </li>
@@ -446,7 +453,7 @@ $productos = $stmt->fetchAll();
             <h6 class="text-uppercase fw-bold mb-3">Comprar por Categoría</h6>
             <ul class="list-group list-group-flush">
                 <?php foreach ($categories as $category): ?>
-                    <li class="list-group-item"><a href="#"
+                    <li class="list-group-item"><a href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"
                             class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
@@ -455,10 +462,12 @@ $productos = $stmt->fetchAll();
             <hr>
             <h6 class="text-uppercase fw-bold mb-3">Ayuda y Configuración</h6>
             <ul class="list-group list-group-flush">
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Mi Cuenta</a></li>
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Servicio al Cliente</a>
-                </li>
-                <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Idioma</a></li>
+                <li class="list-group-item"><a href="cuenta.php" class="text-decoration-none text-dark">Mi Cuenta</a></li>
+                <li class="list-group-item"><a href="pedidos.php" class="text-decoration-none text-dark">Mis Pedidos</a></li>
+                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li>
+                <li class="list-group-item"><a href="#">Servicio al Cliente</a></li>
+                <li class="list-group-item"><a href="#">Idioma</a></li>
+                <li class="list-group-item"><a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
             </ul>
         </div>
     </div>

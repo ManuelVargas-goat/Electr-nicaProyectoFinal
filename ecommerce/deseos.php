@@ -86,6 +86,14 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
 // Verificar si el usuario está logeado para personalizar la navegación
 $is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
 $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate';
+
+// Logica para cerrar sesión
+if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
+    $_SESSION = array(); // Limpiar variables de sesión
+    session_destroy();
+    header("Location: Inicio_Principal.php");
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -335,12 +343,12 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                                 <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
                                 <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
                                 <li><hr class="dropdown-divider bg-secondary"></li>
-                                <li><a class="dropdown-item" href="logout.php">Cerrar Sesión</a></li>
+                                <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
                             </ul>
                         <?php endif; ?>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#">
+                        <a class="nav-link" href="Reclamo.php">
                             Devoluciones <br> <span class="fw-bold">& Pedidos</span>
                         </a>
                     </li>
@@ -379,7 +387,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <h6 class="text-uppercase fw-bold mb-3">Comprar por Categoría</h6>
             <ul class="list-group list-group-flush">
                 <?php foreach ($categories as $category): ?>
-                    <li class="list-group-item"><a href="#" class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a></li>
+                    <li class="list-group-item"><a href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>" class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a></li>
                 <?php endforeach; ?>
                 <li class="list-group-item"><a href="#" class="text-decoration-none text-dark">Ver todo</a></li>
             </ul>
@@ -391,7 +399,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                 <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li>
                 <li class="list-group-item"><a href="#">Servicio al Cliente</a></li>
                 <li class="list-group-item"><a href="#">Idioma</a></li>
-                <li class="list-group-item"><a href="logout.php">Cerrar Sesión</a></li>
+                <li class="list-group-item"><a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
             </ul>
         </div>
     </div>
