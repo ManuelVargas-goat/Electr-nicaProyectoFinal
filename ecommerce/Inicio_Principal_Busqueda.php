@@ -55,9 +55,66 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 
+// Obtener precio mas alto de los productos
+$precioAlto = $conn->query("SELECT MAX(precio) as precio FROM producto")->fetch(PDO::FETCH_ASSOC);
+
 // Verificar si el usuario está logeado para personalizar la navegación
 $is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
 $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate'; // Asume 'user_usuario' se establece en login.php
+
+// Parámetros de filtro
+$busqueda = $_GET['buscar'] ?? '';
+$categoriaFiltrada = $_GET['categoria'] ?? '';
+$filtroPrecioMin = $_GET['precio_min'] ?? '';
+$filtroPrecioMax = $_GET['precio_max'] ?? '';
+
+if (isset($_GET['id'])) {
+    $categoriaFiltrada = $_GET['id'];
+}
+
+// Consulta dinámica
+$where = [];
+$params = [];
+
+$where[] = "p.descontinuado = FALSE ";
+
+if (!empty($busqueda)) {
+    $where[] = "(p.nombre ILIKE :buscar OR CAST(p.producto_id AS TEXT) ILIKE :buscar)";
+    $params[':buscar'] = "%$busqueda%";
+}
+
+if (!empty($categoriaFiltrada)) {
+    $where[] = "p.categoria_id = :categoria";
+    $params[':categoria'] = $categoriaFiltrada;
+}
+
+if (!empty($filtroPrecioMin)) {
+    $where[] = "p.precio >= :precio_min";
+    $params[':precio_min'] = $filtroPrecioMin;
+}
+if (!empty($filtroPrecioMax)) {
+    $where[] = "p.precio <= :precio_max";
+    $params[':precio_max'] = $filtroPrecioMax;
+}
+
+$sqlProductosBuscados = "SELECT p.producto_id as id, p.nombre, p.descripcion, p.marca, p.precio, p.categoria_id,
+                         p.ruta_imagen as ruta_imagen, COALESCE(s.cantidad, 0) as stock_quantity
+                         FROM producto p LEFT JOIN stock s ON p.producto_id = s.producto_id 
+                        ";
+
+if ($where) {
+    $sqlProductosBuscados .= " WHERE " . implode(" AND ", $where);
+}
+
+$sqlProductosBuscados .= " ORDER BY p.producto_id DESC";
+
+$stmt = $conn->prepare($sqlProductosBuscados);
+$stmt->execute($params);
+$productos = $stmt->fetchAll();
+
+
+
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -325,9 +382,6 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                     </form>
             </div>
 
-
-
-
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item <?php echo $is_logged_in ? 'dropdown' : ''; ?>">
@@ -373,7 +427,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <ul class="navbar-nav">
                 <?php foreach ($categories as $category): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"><?php echo htmlspecialchars($category['nombre']); ?></a>
+                        <a class="nav-link" href="#"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -414,53 +468,106 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
 
     <!-- Main Content -->
     <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            <?php if (empty($products)): ?>
-                <div class="col-12">
-                    <div class="alert alert-warning text-center" role="alert">
-                        No se encontraron productos.
+        <div class="row">
+
+            <div class="col-md-3">
+                <h5>Filtros de búsqueda</h5>
+
+                <form method="GET">
+                    <div class="mb-3">
+                        <input type="text" name="buscar" class="form-control" placeholder="Buscar..."
+                            value="<?= htmlspecialchars($busqueda) ?>">
                     </div>
-                </div>
-            <?php else: ?>
-                <?php foreach ($products as $product): ?>
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top"
-                                alt="<?php echo htmlspecialchars($product['nombre']); ?>"
-                                onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?>
-                                </p>
-                                <div class="mt-auto">
-                                    <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
-                                    <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
-                                    <?php if ($product['stock_quantity'] == 0): ?>
-                                        <span class="out-of-stock-badge">Sin existencias</span>
-                                        <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
-                                            Agotado
-                                        </button>
-                                    <?php else: ?>
-                                        <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
-                                        <form action="agregar_producto.php" method="POST">
-                                            <input type="hidden" name="action" value="add">
-                                            <input type="hidden" name="product_id"
-                                                value="<?php echo htmlspecialchars($product['id']); ?>">
-                                            <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
-                                            <button type="submit" class="btn btn-add-to-cart w-100">
-                                                Añadir al Carrito
+                    <div class="mb-3">
+                        <select name="categoria" class="form-select">
+                            <option value="">Todas las Categorías</option>
+                            <?php foreach ($categories as $cat): ?>
+                                <option value="<?= $cat['categoria_id'] ?>" <?= $categoriaFiltrada == $cat['categoria_id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($cat['nombre']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <ul class="list-inline">
+                            <li class="list-inline-item">
+                                <input name="precio_min" class="form-control" type="number" id="precio-min"
+                                    name="precio-min" min="0" max="<?= htmlspecialchars($precioAlto['precio']) ?>"
+                                    placeholder="0">
+                            </li>
+                            <li class="list-inline-item">
+                                <p>-</p>
+                            </li>
+                            <li class="list-inline-item ">
+                                <input name="precio_max" class="form-control" type="number" id="precio-max"
+                                    name="precio-max" min="0" max="<?= htmlspecialchars($precioAlto['precio']) ?>"
+                                    placeholder="<?= htmlspecialchars($precioAlto['precio']) ?>">
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="mb-2 d-grid">
+                        <button type="submit" class="btn btn-primary">Buscar</button>
+                    </div>
+                    <div class="mb-2 d-grid">
+                        <a href="Inicio_Principal_Busqueda.php" class="btn btn-secondary">Limpiar</a>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Inicio Carga de Productos -->
+
+            <div class="col-md-9">
+
+                <div class="row">
+                    <?php foreach ($productos as $producto): ?>
+
+                        <div class="col-md-4 mb-4">
+                            <div class="card h-100">
+                                <img src="<?php echo htmlspecialchars($producto['ruta_imagen']); ?>" class="card-img-top"
+                                    alt="<?php echo htmlspecialchars($producto['nombre']); ?>"
+                                    onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title"><?php echo htmlspecialchars($producto['nombre']); ?></h5>
+                                    <p class="card-text text-muted small">
+                                        <?php echo htmlspecialchars($producto['descripcion']); ?>
+                                    </p>
+                                    <div class="mt-auto">
+                                        <p class="mb-1 product-brand">Marca:
+                                            <?php echo htmlspecialchars($producto['marca']); ?></p>
+                                        <p class="product-price">S/ <?php echo number_format($producto['precio'], 2); ?></p>
+                                        <?php if ($producto['stock_quantity'] == 0): ?>
+                                            <span class="out-of-stock-badge">Sin existencias</span>
+                                            <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
+                                                Agotado
                                             </button>
-                                        </form>
-                                    <?php endif; ?>
+                                        <?php else: ?>
+                                            <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
+                                            <form action="agregar_producto.php" method="POST">
+                                                <input type="hidden" name="action" value="add">
+                                                <input type="hidden" name="product_id"
+                                                    value="<?php echo htmlspecialchars($producto['id']); ?>">
+                                                <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
+                                                <button type="submit" class="btn btn-add-to-cart w-100">
+                                                    Añadir al Carrito
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+                    <?php endforeach; ?>
+
+                    <?php if (empty($productos)): ?>
+                        <p>No hay productos que coincidan con los filtros.</p>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+
         </div>
+        
     </main>
 
     <!-- Footer -->

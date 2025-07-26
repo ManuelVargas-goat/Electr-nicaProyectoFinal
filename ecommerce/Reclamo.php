@@ -12,38 +12,139 @@ define('DB_PORT', '5432'); // Puerto de PostgreSQL
 
 $conn = null;
 try {
-    // Establecer conexión a la base de datos usando PDO
-    // Se incluye el puerto en la cadena de conexión
     $conn = new PDO("pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME, DB_USER, DB_PASSWORD);
-    // Establecer el modo de error de PDO a excepción para una mejor depuración
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Opcional: Establecer el juego de caracteres a UTF-8
     $conn->exec("SET NAMES 'UTF8'");
 } catch (PDOException $e) {
-    // En un entorno de producción, es mejor registrar el error detallado (error_log)
-    // y mostrar un mensaje genérico al usuario por seguridad.
-    error_log("Error de conexión a la base de datos: " . $e->getMessage()); // Esto guarda el error en los logs del servidor
-    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde."); // Mensaje para el usuario
+    error_log("Error de conexión a la base de datos en cuenta.php: " . $e->getMessage());
+    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
 }
 
-// --- Obtener productos de la base de datos (con stock) ---
-$products = [];
+$user_data = null;
+$message = '';
+
+// --- 1. Verificar si hay una sesión de cliente iniciada ---
+$usuario_cliente_id = isset($_SESSION['usuario_cliente_id']) ? intval($_SESSION['usuario_cliente_id']) : 0;
+
+if ($usuario_cliente_id === 0) {
+    // Si no hay sesión de cliente, redirigir a la página de login
+    header('Location: login.php?redirect_to=cuenta.php');
+    exit();
+}
+
+// --- 2. Obtener datos del usuario logeado ---
 try {
-    $stmt = $conn->query("SELECT p.producto_id as id, p.nombre, p.precio, p.marca, p.descripcion, p.ruta_imagen, p.categoria_id, COALESCE(s.cantidad, 0) as stock_quantity FROM producto p LEFT JOIN stock s ON p.producto_id = s.producto_id WHERE p.descontinuado = FALSE ORDER BY p.nombre ASC");
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $conn->prepare("SELECT usuario_cliente_id, usuario, clave, rol, persona_id FROM usuario_cliente WHERE usuario_cliente_id = ?");
+    $stmt->execute([$usuario_cliente_id]);
+    $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $stmtPersona = $conn->prepare("SELECT p.persona_id as persona_id,p.nombre, p.apellido_paterno, p.apellido_materno, p.fecha_nacimiento, p.sexo, p.email, p.direccion, p.telefono
+                  FROM persona p JOIN usuario_cliente uc ON uc.persona_id = p.persona_id
+                  WHERE uc.usuario_cliente_id = ?");
+    $stmtPersona->execute([$usuario_cliente_id]);
+    $user_perfil = $stmtPersona->fetch(PDO::FETCH_ASSOC);
+
+
+    if (!$user_data) {
+        // Si el ID de usuario en sesión no corresponde a un usuario válido
+        session_destroy(); // Destruir la sesión inválida
+        header('Location: login.php?redirect_to=cuenta.php&msg=' . urlencode('Tu sesión ha expirado o es inválida. Por favor, inicia sesión de nuevo.'));
+        exit();
+    }
 } catch (PDOException $e) {
-    error_log("Error al obtener productos: " . $e->getMessage());
-    // Si hay un error al obtener productos, la página se mostrará sin ellos.
-    $products = [];
+    error_log("Error al obtener datos del usuario en cuenta.php: " . $e->getMessage());
+    $message = "<div class='alert alert-danger text-center' role='alert'>Error al cargar los datos de tu cuenta.</div>";
 }
 
-// --- Obtener categorías de la base de datos ---
+// --- 2. Obtener nombre completo del usuario logeado ---
+if ($user_perfil) {
+    $nombreUsuario = $user_perfil['nombre'] . ' ' . $user_perfil['apellido_paterno'];
+}
+
+// --- 3. Obtener historial de compras del usuario ---
+try {
+    // Obtener todas las compras del usuario
+    $stmt_orders = $conn->prepare("
+        SELECT
+            c.compra_id,
+            c.fecha_compra,
+            e.nombre as estado_compra,
+            a.nombre as nombre_almacen
+        FROM
+            compra c
+        JOIN
+            estado e ON c.estado_id = e.estado_id
+        JOIN
+            almacen a ON c.almacen_id = a.almacen_id
+        WHERE
+            c.usuario_cliente_id = ?
+        ORDER BY
+            c.fecha_compra DESC
+    ");
+    $stmt_orders->execute([$usuario_cliente_id]);
+    $raw_orders = $stmt_orders->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($raw_orders as $order) {
+        $order_id = $order['compra_id'];
+        $order_total = 0;
+        $order_details = [];
+
+        // Obtener los detalles de cada compra
+        $stmt_details = $conn->prepare("
+            SELECT
+                dc.compra_id,
+                dc.cantidad,
+                dc.precio_unitario,
+                dc.descuento,
+                p.nombre as producto_nombre,
+                p.ruta_imagen
+            FROM
+                detalle_compra dc
+            JOIN
+                producto p ON dc.producto_id = p.producto_id
+            WHERE
+                dc.compra_id = ?
+        ");
+        $stmt_details->execute([$order_id]);
+        $raw_details = $stmt_details->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($raw_details as $detail) {
+            $item_subtotal = $detail['cantidad'] * $detail['precio_unitario'] - $detail['descuento'];
+            $order_total += $item_subtotal;
+            $order_details[] = $detail;
+        }
+
+        $orders[] = [
+            'info' => $order,
+            'details' => $order_details,
+            'total' => $order_total
+        ];
+    }
+
+    if (empty($orders)) {
+        $message = "<div class='alert alert-info text-center' role='alert'>No has realizado ninguna compra aún.</div>";
+    }
+
+} catch (PDOException $e) {
+    error_log("Error al obtener historial de pedidos en pedidos.php: " . $e->getMessage());
+    $message = "<div class='alert alert-danger text-center' role='alert'>Error al cargar tu historial de pedidos. Por favor, inténtalo de nuevo más tarde.</div>";
+}
+
+// --- 3. Obtener relaciones producto-proveedor-pedido para el formulario --- 
+$relaciones = $conn->query("
+    SELECT dc.compra_id, dc.producto_id, p.nombre AS producto, dc.cantidad
+    FROM detalle_compra dc
+    JOIN producto p ON dc.producto_id = p.producto_id
+    ORDER BY dc.compra_id DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// --- Obtener categorías de la base de datos para la navegación ---
 $categories = [];
 try {
     $stmt = $conn->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre ASC");
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("Error al obtener categorías: " . $e->getMessage());
+    error_log("Error al obtener categorías en pedidos.php: " . $e->getMessage());
     $categories = [];
 }
 
@@ -58,6 +159,48 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
 // Verificar si el usuario está logeado para personalizar la navegación
 $is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
 $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate'; // Asume 'user_usuario' se establece en login.php
+
+// Procesar formulario
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $pedidoId = $_POST['pedido_id'];
+    $productoId = $_POST['producto_id'];
+    $cantidad = $_POST['cantidad'];
+    $motivo = $_POST['motivo'];
+
+    try {
+        $conn->beginTransaction();
+
+        // Insertar la devolución
+        $sql = "INSERT INTO devolucion (fecha, tipo, usuario_cliente_id, observaciones)
+                VALUES (CURRENT_TIMESTAMP, 'cliente', :usuario_id, :motivo)
+                RETURNING devolucion_id";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([
+            ':usuario_id' => $usuario_cliente_id,
+            ':motivo' => $motivo
+        ]);
+        $devolucionId = $stmt->fetchColumn();
+
+        // Insertar detalle de devolución
+        $sqlDetalle = "INSERT INTO detalle_devolucion (devolucion_id, producto_id, cantidad, motivo, reingresado_stock)
+                       VALUES (:devolucion_id, :producto_id, :cantidad, :motivo, 'false')";
+        $stmt = $conn->prepare($sqlDetalle);
+        $stmt->execute([
+            ':devolucion_id' => $devolucionId,
+            ':producto_id' => $productoId,
+            ':cantidad' => $cantidad,
+            ':motivo' => $motivo
+        ]);
+
+        $conn->commit();
+        header("Location: pedidos.php");
+        exit();
+    } catch (Exception $e) {
+        $conn->rollBack();
+        die("Error al registrar devolución: " . $e->getMessage());
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -320,13 +463,11 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <!-- Search Bar -->
             <div class="d-flex flex-grow-1">
                 <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
-                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
-                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
-                    </form>
+                    <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"
+                        style="color: black;" name="q">
+                    <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                </form>
             </div>
-
-
-
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
@@ -349,7 +490,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                         <?php endif; ?>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="Reclamo.php">
+                        <a class="nav-link" href="#">
                             Devoluciones <br> <span class="fw-bold">& Pedidos</span>
                         </a>
                     </li>
@@ -373,7 +514,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <ul class="navbar-nav">
                 <?php foreach ($categories as $category): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"><?php echo htmlspecialchars($category['nombre']); ?></a>
+                        <a class="nav-link" href="#"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -414,54 +555,116 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
 
     <!-- Main Content -->
     <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            <?php if (empty($products)): ?>
-                <div class="col-12">
-                    <div class="alert alert-warning text-center" role="alert">
-                        No se encontraron productos.
-                    </div>
-                </div>
-            <?php else: ?>
-                <?php foreach ($products as $product): ?>
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top"
-                                alt="<?php echo htmlspecialchars($product['nombre']); ?>"
-                                onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?>
-                                </p>
-                                <div class="mt-auto">
-                                    <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
-                                    <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
-                                    <?php if ($product['stock_quantity'] == 0): ?>
-                                        <span class="out-of-stock-badge">Sin existencias</span>
-                                        <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
-                                            Agotado
-                                        </button>
-                                    <?php else: ?>
-                                        <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
-                                        <form action="agregar_producto.php" method="POST">
-                                            <input type="hidden" name="action" value="add">
-                                            <input type="hidden" name="product_id"
-                                                value="<?php echo htmlspecialchars($product['id']); ?>">
-                                            <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
-                                            <button type="submit" class="btn btn-add-to-cart w-100">
-                                                Añadir al Carrito
-                                            </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
+        <div class="row justify-content-center">
+
+            <div class="col-lg-8">
+
+                <div class="account-container">
+
+                    <form method="POST" class="bg-white p-4 rounded shadow-sm">
+
+                        <div class="mb-3">
+                            <label class="form-label">Usuario</label>
+                            <input type="text" class="form-control" value="<?= htmlspecialchars($nombreUsuario) ?>"
+                                readonly>
                         </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+
+                        <div class="mb-3">
+                            <label class="form-label">Pedido Entregado</label>
+                            <select name="compra_id" id="compra_id" class="form-select" required>
+                                <option value="">Seleccione una compra</option>
+                                <?php foreach ($orders as $o): ?>
+                                    <option value="<?= $o['info']['compra_id'] ?>">#<?= $o['info']['compra_id'] ?> -
+                                        <?= $o['info']['fecha_compra'] ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Producto</label>
+                            <select name="producto_id" id="producto_id" class="form-select" required disabled>
+                                <option value="">Seleccione un pedido primero</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Cantidad</label>
+                            <input type="number" name="cantidad" class="form-control" required min="1">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Motivo</label>
+                            <textarea name="motivo" class="form-control" required></textarea>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="gestion_existencias_devoluciones.php" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">Registrar Devolución</button>
+                        </div>
+                    </form>
+
+                </div>
+
+            </div>
+
         </div>
+
     </main>
+
+    <script>
+
+            const relaciones = <?= json_encode($relaciones) ?>;
+
+            const compraSelect = document.getElementById('compra_id')
+            const productoSelect = document.getElementById('producto_id')
+            const cantidadInput = document.querySelector('input[name="cantidad"]')
+
+
+            console.log(compraSelect)
+
+            let cantidadMax = 0;
+
+            compraSelect.addEventListener('change', () => {
+                const compraId = parseInt(compraSelect.value);
+                console.log(compraId)
+                productoSelect.innerHTML = '<option value="">Seleccione un producto</option>'
+                productoSelect.disabled = true
+                cantidadInput.value = ''
+                cantidadInput.removeAttribute('max')
+
+                if (!compraId) return
+
+                const productos = relaciones.filter(r => r.compra_id == compraId);
+                productos.forEach(p => {
+                    const opt = document.createElement('option')
+                    opt.value = p.producto_id
+                    opt.textContent = p.producto
+                    opt.dataset.maxCantidad = p.cantidad
+                    productoSelect.appendChild(opt)
+                });
+
+                productoSelect.disabled = false;
+            });
+
+
+            productoSelect.addEventListener('change', () => {
+                const option = productoSelect.options[productoSelect.selectedIndex];
+                cantidadMax = parseInt(option.dataset.maxCantidad) || 0;
+                cantidadInput.value = '';
+                cantidadInput.setAttribute('max', cantidadMax);
+                cantidadInput.setAttribute('placeholder', `Máx: ${cantidadMax}`);
+            });
+
+            cantidadInput.addEventListener('input', () => {
+                const val = parseInt(cantidadInput.value);
+                if (val > cantidadMax) {
+                    cantidadInput.value = cantidadMax;
+                }
+            })
+
+        </script>
 
     <!-- Footer -->
     <footer class="footer-amazon">

@@ -61,6 +61,7 @@ try {
         // Obtener los detalles de cada compra
         $stmt_details = $conn->prepare("
             SELECT
+                dc.compra_id,
                 dc.cantidad,
                 dc.precio_unitario,
                 dc.descuento,
@@ -365,10 +366,11 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda"
-                    aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -471,22 +473,22 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <div class="col-lg-10">
 
 
-                    <div class="account-container">
-                        <?php echo $message; // Muestra mensajes de error o éxito ?>
+                <div class="account-container">
+                    <?php echo $message; // Muestra mensajes de error o éxito ?>
 
-                        <?php if (!empty($orders)): ?>
-                            <div class="text-center">
-                                <a href="cuenta.php" class="btn btn-primary ms-2">Editar Perfil</a>
-                                <a href="pedidos.php" class="btn btn-secondary ms-2">Ver Mis Pedidos</a>
-                                <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true" class="btn btn-danger ms-2">Cerrar
-                                    sesion</a>
-                            </div>
-                        <?php else: ?>
-                            <div class="alert alert-info text-center" role="alert">
-                                No se pudo cargar la información de tu cuenta.
-                            </div>
-                        <?php endif; ?>
-                    </div>
+                    <?php if (!empty($orders)): ?>
+                        <div class="text-center">
+                            <a href="cuenta.php" class="btn btn-primary ms-2">Editar Perfil</a>
+                            <a href="pedidos.php" class="btn btn-secondary ms-2">Ver Mis Pedidos</a>
+                            <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true" class="btn btn-danger ms-2">Cerrar
+                                sesion</a>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-info text-center" role="alert">
+                            No se pudo cargar la información de tu cuenta.
+                        </div>
+                    <?php endif; ?>
+                </div>
 
                 <div class="orders-container">
                     <?php echo $message; // Muestra mensajes de error o si no hay pedidos ?>
@@ -503,9 +505,13 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                                             <?php echo htmlspecialchars($order['info']['estado_compra']); ?></span><br>
                                         <span>Almacén: <?php echo htmlspecialchars($order['info']['nombre_almacen']); ?></span>
                                     </div>
-                                    <div class="text-end">
+                                    <div class="justify-content-center">
                                         Total del Pedido: <span class="text-success">S/
                                             <?php echo number_format($order['total'], 2); ?></span>
+                                    </div>
+                                    <div class="text-end">
+                                        <span><a href="Reclamo.php?compra_id=<?php echo htmlspecialchars($order['info']['compra_id']); ?>"
+                                                class="btn btn-danger">Realizar un Reclamo</a></span>
                                     </div>
                                 </div>
                                 <div class="order-body">
