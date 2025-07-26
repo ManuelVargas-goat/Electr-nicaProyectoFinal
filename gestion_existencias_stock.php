@@ -27,7 +27,7 @@ try {
     $stmt_categorias = $pdo->query($sql_categorias);
     $categorias = $stmt_categorias->fetchAll(PDO::FETCH_COLUMN, 0);
 } catch (PDOException $e) {
-    error_log("Error al cargar categorías en gestion_existencias_stock.php: " . $e->getMessage());
+    error_log("Error al cargar categorías: " . $e->getMessage());
     $categorias = []; // Asegura que $categorias sea un array vacío si falla
 }
 
@@ -58,8 +58,8 @@ SELECT p.producto_id,
         p.nombre,
         p.marca,
         c.nombre AS categoria,
-        s.cantidad AS stock_disponible, -- Obtenemos el stock directamente de la tabla 'stock'
-        s.fecha_ultima_entrada          -- Columna incluida para evitar el 'Undefined array key'
+        s.cantidad AS stock_disponible -- Obtenemos el stock directamente de la tabla 'stock'
+        -- s.fecha_ultima_entrada          -- Columna eliminada según tu solicitud
 FROM producto p
 LEFT JOIN categoria c ON p.categoria_id = c.categoria_id
 JOIN stock s ON p.producto_id = s.producto_id -- Unimos con la tabla stock para obtener la cantidad
@@ -282,7 +282,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <th>Marca</th>
                             <th>Categoría</th>
                             <th>Stock Disponible</th>
-                            <th>Última Actualización</th> <!-- Columna descomentada -->
+                            <!-- <th>Última Actualización</th> Columna eliminada -->
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -297,7 +297,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                     <td class="<?= ($producto['stock_disponible'] <= 0) ? 'bg-danger text-white fw-bold' : '' ?>">
                                         <?= ($producto['stock_disponible'] <= 0) ? 'Sin stock' : htmlspecialchars($producto['stock_disponible']) ?>
                                     </td>
-                                    <td><?= htmlspecialchars($producto['fecha_ultima_entrada'] ? date('Y-m-d H:i', strtotime($producto['fecha_ultima_entrada'])) : 'N/A') ?></td> <!-- Columna descomentada -->
+                                    <!-- <td><?= htmlspecialchars($producto['fecha_ultima_entrada'] ? date('Y-m-d H:i', strtotime($producto['fecha_ultima_entrada'])) : 'N/A') ?></td> Columna eliminada -->
                                     <td>
                                         <a href="detalle_stock.php?producto_id=<?= htmlspecialchars($producto['producto_id']) ?>" class="btn btn-sm btn-info">Ver detalles</a>
                                     </td>
@@ -305,7 +305,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
+                                <td colspan="6" class="text-center">No se encontraron productos en el stock con los filtros aplicados.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -342,16 +342,16 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
         // Abre el submenú de existencias si alguna de sus sub-páginas está activa
         if (existenciasToggle && existenciasSubmenu && existenciasToggle.classList.contains('current-page')) {
-            existenciasSubmenu.classList.add('active');
+             existenciasSubmenu.classList.add('active');
         }
 
         if (existenciasToggle) {
-            existenciasToggle.addEventListener('click', function(e) {
-                e.preventDefault();
-                if (existenciasSubmenu) {
-                    existenciasSubmenu.classList.toggle('active');
-                }
-            });
+             existenciasToggle.addEventListener('click', function(e) {
+                 e.preventDefault();
+                 if (existenciasSubmenu) {
+                     existenciasSubmenu.classList.toggle('active');
+                 }
+             });
         }
 
         // --- Lógica: Botón Limpiar Filtros ---

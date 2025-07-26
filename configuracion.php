@@ -10,7 +10,7 @@ if (!isset($_SESSION['usuario'])) {
 $usuario = $_SESSION['usuario'];
 
 // Obtener datos del usuario actual (nombre y rol) para el sidebar
-$sql = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol, ue.persona_id
+$sql = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol, ue.persona_id, ue.clave as stored_password_hash
         FROM usuario_empleado ue
         JOIN persona per ON ue.persona_id = per.persona_id
         JOIN rol r ON ue.rol_id = r.rol_id
@@ -24,11 +24,13 @@ $usuarioActual = $stmt->fetch(PDO::FETCH_ASSOC);
 $nombreUsuario = 'Usuario'; // Valor por defecto
 $rolUsuario = ''; // Valor por defecto
 $personaId = null;
+$storedPasswordHash = null; // Para almacenar el hash de la contraseña actual
 
 if ($usuarioActual) {
-    $nombreUsuario = $usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno'];
-    $rolUsuario = strtolower($usuarioActual['rol']);
+    $nombreUsuario = htmlspecialchars($usuarioActual['nombre'] . ' ' . $usuarioActual['apellido_paterno']);
+    $rolUsuario = strtolower(htmlspecialchars($usuarioActual['rol']));
     $personaId = $usuarioActual['persona_id'];
+    $storedPasswordHash = $usuarioActual['stored_password_hash']; // Captura el hash de la contraseña
 }
 
 // Obtener datos completos de la persona para la configuración del perfil
@@ -54,9 +56,10 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     unset($_SESSION['modal_type']);
 }
 
-// Lógica para actualizar perfil o cambiar contraseña (procesa solo si no hay mensaje de sesión pendiente)
+// Lógica para actualizar perfil, cambiar contraseña o cambiar usuario (procesa solo si no hay mensaje de sesión pendiente)
 if (empty($mensaje)) { // Only process if no session message is pending
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+        // --- INICIO DE LÓGICA PARA ACTUALIZAR PERFIL ---
         $nombre = trim($_POST['nombre'] ?? '');
         $apellido_paterno = trim($_POST['apellido_paterno'] ?? '');
         $apellido_materno = trim($_POST['apellido_materno'] ?? '');
@@ -76,15 +79,15 @@ if (empty($mensaje)) { // Only process if no session message is pending
         } else {
             try {
                 $sqlUpdate = "UPDATE persona SET
-                              nombre = :nombre,
-                              apellido_paterno = :apellido_paterno,
-                              apellido_materno = :apellido_materno,
-                              email = :email,
-                              direccion = :direccion,
-                              telefono = :telefono,
-                              fecha_nacimiento = :fecha_nacimiento,
-                              sexo = :sexo
-                              WHERE persona_id = :persona_id";
+                                  nombre = :nombre,
+                                  apellido_paterno = :apellido_paterno,
+                                  apellido_materno = :apellido_materno,
+                                  email = :email,
+                                  direccion = :direccion,
+                                  telefono = :telefono,
+                                  fecha_nacimiento = :fecha_nacimiento,
+                                  sexo = :sexo
+                                  WHERE persona_id = :persona_id";
 
                 $stmtUpdate = $pdo->prepare($sqlUpdate);
                 $stmtUpdate->bindParam(':nombre', $nombre);
@@ -106,7 +109,7 @@ if (empty($mensaje)) { // Only process if no session message is pending
                     $perfilUsuario = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
 
                     // Actualizar el nombre del usuario en el sidebar si ha cambiado
-                    $nombreUsuario = $perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno'];
+                    $nombreUsuario = htmlspecialchars($perfilUsuario['nombre'] . ' ' . $perfilUsuario['apellido_paterno']);
 
                 } else {
                     $mensaje = 'Error al actualizar el perfil. Inténtelo de nuevo.';
@@ -117,27 +120,70 @@ if (empty($mensaje)) { // Only process if no session message is pending
                 $tipoMensaje = 'danger';
             }
         }
-    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
-        $new_password = $_POST['new_password'] ?? '';
-        $confirm_password = $_POST['confirm_password'] ?? '';
+        // --- FIN DE LÓGICA PARA ACTUALIZAR PERFIL ---
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_username'])) {
+        // --- INICIO DE LÓGICA PARA CAMBIAR USUARIO ---
+        $new_username = trim($_POST['new_username'] ?? '');
 
-        if (empty($new_password) || empty($confirm_password)) {
-            $mensaje = 'Por favor, ingrese y confirme la nueva contraseña.';
-            $tipoMensaje = 'danger';
-        } elseif ($new_password !== $confirm_password) {
-            $mensaje = 'Las contraseñas no coinciden.';
-            $tipoMensaje = 'danger';
-        } elseif (strlen($new_password) < 6) {
-            $mensaje = 'La contraseña debe tener al menos 6 caracteres.';
+        if (empty($new_username)) {
+            $mensaje = 'Por favor, ingrese el nuevo nombre de usuario.';
             $tipoMensaje = 'danger';
         } else {
             try {
-                // En una aplicación real, usar password_hash() para almacenar contraseñas de forma segura
-                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                // Verificar si el nuevo nombre de usuario ya existe
+                $stmtCheckUser = $pdo->prepare("SELECT COUNT(*) FROM usuario_empleado WHERE usuario = :new_username AND persona_id <> :persona_id");
+                $stmtCheckUser->execute([':new_username' => $new_username, ':persona_id' => $personaId]);
+                if ($stmtCheckUser->fetchColumn() > 0) {
+                    $mensaje = 'El nombre de usuario ya está en uso. Por favor, elija otro.';
+                    $tipoMensaje = 'danger';
+                } else {
+                    // Actualizar el nombre de usuario
+                    $sqlUpdateUser = "UPDATE usuario_empleado SET usuario = :new_username WHERE persona_id = :persona_id";
+                    $stmtUpdateUser = $pdo->prepare($sqlUpdateUser);
+                    $stmtUpdateUser->bindParam(':new_username', $new_username);
+                    $stmtUpdateUser->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
-                $sqlUpdatePassword = "UPDATE usuario_empleado SET password = :password WHERE persona_id = :persona_id";
+                    if ($stmtUpdateUser->execute()) {
+                        $_SESSION['usuario'] = $new_username; // Actualizar la sesión con el nuevo nombre de usuario
+                        $_SESSION['modal_message'] = '¡Nombre de usuario cambiado con éxito!';
+                        $_SESSION['modal_type'] = 'success';
+                        header("Location: configuracion.php"); // Redirigir para refrescar la página y el sidebar
+                        exit();
+                    } else {
+                        $mensaje = 'Error al cambiar el nombre de usuario. Inténtelo de nuevo.';
+                        $tipoMensaje = 'danger';
+                    }
+                }
+            } catch (PDOException $e) {
+                $mensaje = 'Error de base de datos al cambiar el nombre de usuario: ' . $e->getMessage();
+                $tipoMensaje = 'danger';
+            }
+        }
+        // --- FIN DE LÓGICA PARA CAMBIAR USUARIO ---
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
+        $current_password = $_POST['current_password'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
+
+        if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
+            $mensaje = 'Por favor, complete todos los campos de contraseña.';
+            $tipoMensaje = 'danger';
+        } elseif (!password_verify($current_password, $storedPasswordHash)) {
+            $mensaje = 'La contraseña actual no es correcta.';
+            $tipoMensaje = 'danger';
+        } elseif ($new_password !== $confirm_password) {
+            $mensaje = 'Las nuevas contraseñas no coinciden.';
+            $tipoMensaje = 'danger';
+        } elseif (strlen($new_password) < 6) {
+            $mensaje = 'La nueva contraseña debe tener al menos 6 caracteres.';
+            $tipoMensaje = 'danger';
+        } else {
+            try {
+                $hashed_new_password = password_hash($new_password, PASSWORD_DEFAULT);
+
+                $sqlUpdatePassword = "UPDATE usuario_empleado SET clave = :new_password_hash WHERE persona_id = :persona_id";
                 $stmtUpdatePassword = $pdo->prepare($sqlUpdatePassword);
-                $stmtUpdatePassword->bindParam(':password', $hashed_password);
+                $stmtUpdatePassword->bindParam(':new_password_hash', $hashed_new_password);
                 $stmtUpdatePassword->bindParam(':persona_id', $personaId, PDO::PARAM_INT);
 
                 if ($stmtUpdatePassword->execute()) {
@@ -473,9 +519,23 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                         <button type="submit" class="btn btn-primary">Guardar Cambios del Perfil</button>
                     </form>
                     <hr>
+                    <h5 class="mt-4">Cambiar Nombre de Usuario</h5>
+                    <form method="POST">
+                        <input type="hidden" name="change_username" value="1">
+                        <div class="mb-3">
+                            <label for="newUsername" class="form-label">Nuevo Nombre de Usuario:</label>
+                            <input type="text" class="form-control" id="newUsername" name="new_username" value="<?= htmlspecialchars($usuario) ?>" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning">Cambiar Nombre de Usuario</button>
+                    </form>
+                    <hr>
                     <h5 class="mt-4">Cambiar Contraseña</h5>
                     <form method="POST">
                         <input type="hidden" name="change_password" value="1">
+                        <div class="mb-3">
+                            <label for="currentPassword" class="form-label">Contraseña Actual:</label>
+                            <input type="password" class="form-control" id="currentPassword" name="current_password" required>
+                        </div>
                         <div class="mb-3">
                             <label for="newPassword" class="form-label">Nueva Contraseña:</label>
                             <input type="password" class="form-control" id="newPassword" name="new_password" required>
@@ -488,21 +548,6 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                     </form>
                 </div>
             </div>
-
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    Configuración del Aplicativo
-                </div>
-                <div class="card-body">
-                    <p>Personaliza la apariencia y el comportamiento general de la aplicación.</p>
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="darkModeSwitch">
-                        <label class="form-check-label" for="darkModeSwitch">Modo Oscuro</label>
-                    </div>
-                    <button type="button" class="btn btn-info">Guardar Configuración del App</button>
-                </div>
-            </div>
-
         </div>
     </div>
 </div>
@@ -545,26 +590,6 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                  }
              });
         }
-
-        // Lógica para el Modo Oscuro
-        const darkModeSwitch = document.getElementById('darkModeSwitch');
-        const body = document.body;
-
-        // Cargar preferencia guardada al cargar la página
-        if (localStorage.getItem('darkMode') === 'enabled') {
-            body.classList.add('dark-mode');
-            darkModeSwitch.checked = true;
-        }
-
-        darkModeSwitch.addEventListener('change', function() {
-            if (this.checked) {
-                body.classList.add('dark-mode');
-                localStorage.setItem('darkMode', 'enabled');
-            } else {
-                body.classList.remove('dark-mode');
-                localStorage.setItem('darkMode', 'disabled');
-            }
-        });
     });
 </script>
 </body>

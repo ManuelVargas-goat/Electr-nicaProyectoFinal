@@ -1,9 +1,7 @@
 <?php
-session_start(); // Inicia la sesión para acceder al carrito
+session_start(); // Inicia la sesión
 
 // --- Configuración de la Base de Datos PostgreSQL ---
-// ¡IMPORTANTE! Estos valores han sido actualizados con tu configuración.
-// Asegúrate de que tu servidor PostgreSQL esté en ejecución y accesible en este puerto.
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'TiendaElectro');
 define('DB_USER', 'juan');
@@ -12,38 +10,68 @@ define('DB_PORT', '5432'); // Puerto de PostgreSQL
 
 $conn = null;
 try {
-    // Establecer conexión a la base de datos usando PDO
-    // Se incluye el puerto en la cadena de conexión
     $conn = new PDO("pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME, DB_USER, DB_PASSWORD);
-    // Establecer el modo de error de PDO a excepción para una mejor depuración
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    // Opcional: Establecer el juego de caracteres a UTF-8
     $conn->exec("SET NAMES 'UTF8'");
 } catch (PDOException $e) {
-    // En un entorno de producción, es mejor registrar el error detallado (error_log)
-    // y mostrar un mensaje genérico al usuario por seguridad.
-    error_log("Error de conexión a la base de datos: " . $e->getMessage()); // Esto guarda el error en los logs del servidor
-    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde."); // Mensaje para el usuario
+    error_log("Error de conexión a la base de datos en deseos.php: " . $e->getMessage());
+    die("Error al conectar con la base de datos. Por favor, inténtalo de nuevo más tarde.");
 }
 
-// --- Obtener productos de la base de datos (con stock) ---
-$products = [];
+$wishlist_products = [];
+$message = '';
+
+// --- 1. Verificar si hay una sesión de cliente iniciada ---
+$usuario_cliente_id = isset($_SESSION['usuario_cliente_id']) ? intval($_SESSION['usuario_cliente_id']) : 0;
+
+if ($usuario_cliente_id === 0) {
+    // Si no hay sesión de cliente, redirigir a la página de login
+    header('Location: login.php?redirect_to=deseos.php');
+    exit();
+}
+
+// --- 2. Obtener productos de la lista de deseos del usuario ---
 try {
-    $stmt = $conn->query("SELECT p.producto_id as id, p.nombre, p.precio, p.marca, p.descripcion, p.ruta_imagen, p.categoria_id, COALESCE(s.cantidad, 0) as stock_quantity FROM producto p LEFT JOIN stock s ON p.producto_id = s.producto_id WHERE p.descontinuado = FALSE ORDER BY p.nombre ASC");
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $conn->prepare("
+        SELECT
+            ld.lista_deseos_id,
+            p.producto_id as id,
+            p.nombre,
+            p.precio,
+            p.marca,
+            p.descripcion,
+            p.ruta_imagen,
+            COALESCE(s.cantidad, 0) as stock_quantity
+        FROM
+            lista_deseos ld
+        JOIN
+            producto p ON ld.producto_id = p.producto_id
+        LEFT JOIN
+            stock s ON p.producto_id = s.producto_id
+        WHERE
+            ld.usuario_cliente_id = ?
+        ORDER BY
+            ld.fecha_agregado DESC
+    ");
+    $stmt->execute([$usuario_cliente_id]);
+    $wishlist_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($wishlist_products)) {
+        $message = "<div class='alert alert-info text-center' role='alert'>Tu lista de deseos está vacía.</div>";
+    }
+
 } catch (PDOException $e) {
-    error_log("Error al obtener productos: " . $e->getMessage());
-    // Si hay un error al obtener productos, la página se mostrará sin ellos.
-    $products = [];
+    error_log("Error al obtener la lista de deseos: " . $e->getMessage());
+    $message = "<div class='alert alert-danger text-center' role='alert'>Error al cargar tu lista de deseos. Por favor, inténtalo de nuevo más tarde.</div>";
 }
 
-// --- Obtener categorías de la base de datos ---
+// --- Obtener categorías de la base de datos para la navegación ---
 $categories = [];
 try {
     $stmt = $conn->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre ASC");
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("Error al obtener categorías: " . $e->getMessage());
+    error_log("Error al obtener categorías en deseos.php: " . $e->getMessage());
     $categories = [];
 }
 
@@ -55,42 +83,29 @@ if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
     }
 }
 
-// Verificar si el usuario está logeado para personalizar la navegación y obtener lista de deseos
+// Verificar si el usuario está logeado para personalizar la navegación
 $is_logged_in = isset($_SESSION['usuario_cliente_id']) && $_SESSION['usuario_cliente_id'] > 0;
-$user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate'; // Asume 'user_usuario' se establece en login.php
-
-$user_wishlist_product_ids = [];
-if ($is_logged_in) {
-    try {
-        $stmt_wishlist = $conn->prepare("SELECT producto_id FROM lista_deseos WHERE usuario_cliente_id = ?");
-        $stmt_wishlist->execute([$_SESSION['usuario_cliente_id']]);
-        $wishlist_raw = $stmt_wishlist->fetchAll(PDO::FETCH_COLUMN, 0); // Obtener solo la columna producto_id
-        $user_wishlist_product_ids = array_flip($wishlist_raw); // Voltear para búsqueda O(1)
-    } catch (PDOException $e) {
-        error_log("Error al obtener lista de deseos: " . $e->getMessage());
-        // Podrías mostrar un mensaje de error al usuario si lo deseas
-    }
-}
+$user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario']) : 'identifícate';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Tienda de Electrónica - Estilo Amazon</title>
+    <title>Mi Lista de Deseos - Mi Tienda de Electrónica</title>
     <!-- Bootstrap CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-    <!-- Font Awesome para iconos (opcional, pero útil para un look más completo) -->
+    <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <!-- Custom CSS -->
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #eaeded; /* Light gray background, similar to Amazon */
+            background-color: #eaeded;
             color: #111;
         }
         .navbar-amazon {
-            background-color: #131921; /* Amazon dark blue/black */
+            background-color: #131921;
             padding: 0.5rem 1rem;
             color: white;
         }
@@ -118,7 +133,7 @@ if ($is_logged_in) {
             height: 40px;
         }
         .navbar-amazon .search-button {
-            background-color: #febd69; /* Amazon orange */
+            background-color: #febd69;
             border-radius: 0 5px 5px 0;
             border: none;
             color: #111;
@@ -130,7 +145,7 @@ if ($is_logged_in) {
             background-color: #f7a847;
         }
         .navbar-amazon .nav-item .dropdown-toggle::after {
-            display: none; /* Hide default caret for Amazon style */
+            display: none;
         }
         .navbar-amazon .nav-item .dropdown-menu {
             background-color: #131921;
@@ -142,10 +157,8 @@ if ($is_logged_in) {
         .navbar-amazon .nav-item .dropdown-item:hover {
             background-color: #333;
         }
-
-        /* Secondary Navbar */
         .navbar-secondary {
-            background-color: #232f3e; /* Amazon dark gray */
+            background-color: #232f3e;
             color: white;
             padding: 0.5rem 1rem;
         }
@@ -154,11 +167,9 @@ if ($is_logged_in) {
             padding: 0.5rem 1rem;
         }
         .navbar-secondary .nav-link:hover {
-            border: 1px solid white; /* Highlight on hover */
+            border: 1px solid white;
             border-radius: 3px;
         }
-
-        /* Offcanvas Menu */
         .offcanvas-header {
             background-color: #232f3e;
             color: white;
@@ -174,49 +185,71 @@ if ($is_logged_in) {
         .offcanvas-body .list-group-item:hover {
             background-color: #f0f0f0;
         }
-
-        /* Product Cards */
-        .card {
+        .wishlist-container {
+            background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,.1);
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            padding: 30px;
+            margin-top: 30px;
+        }
+        .wishlist-item-card {
+            display: flex;
+            align-items: center;
             border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 15px;
         }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,.15);
+        .wishlist-item-card img {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            margin-right: 20px;
+            border: 1px solid #eee;
+            border-radius: 5px;
         }
-        .card-img-top {
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            height: 200px;
-            object-fit: contain; /* Use contain to prevent cropping and show full image */
-            padding: 10px; /* Add some padding around the image */
+        .wishlist-item-details {
+            flex-grow: 1;
         }
-        .btn-add-to-cart {
-            background-color: #ffd814; /* Amazon yellow */
+        .wishlist-item-details h5 {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .wishlist-item-details .price {
+            color: #b12704;
+            font-weight: bold;
+        }
+        .wishlist-item-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .btn-remove-wishlist, .btn-add-to-cart-wishlist {
+            border-radius: 20px;
+            padding: 8px 15px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        .btn-remove-wishlist {
+            background-color: #dc3545;
+            border-color: #dc3545;
+            color: white;
+        }
+        .btn-remove-wishlist:hover {
+            background-color: #c82333;
+            border-color: #c82333;
+        }
+        .btn-add-to-cart-wishlist {
+            background-color: #ffd814;
             border-color: #ffd814;
             color: #111;
-            border-radius: 20px; /* More rounded */
-            font-weight: bold;
-            transition: background-color 0.2s ease-in-out;
         }
-        .btn-add-to-cart:hover {
+        .btn-add-to-cart-wishlist:hover {
             background-color: #f7ca00;
             border-color: #f7ca00;
-            color: #111;
-        }
-        .product-price {
-            font-size: 1.4rem;
-            font-weight: bold;
-            color: #b12704; /* Amazon red for price */
-        }
-        .product-brand {
-            font-size: 0.85rem;
-            color: #555;
         }
         .out-of-stock-badge {
-            background-color: #dc3545; /* Red for out of stock */
+            background-color: #dc3545;
             color: white;
             padding: 5px 10px;
             border-radius: 5px;
@@ -225,28 +258,17 @@ if ($is_logged_in) {
             margin-top: 5px;
             display: inline-block;
         }
-
-        /* Wishlist Heart Icon */
-        .heart-icon {
-            cursor: pointer;
-            color: #ccc; /* Default grey color */
-            transition: color 0.2s ease-in-out;
-            font-size: 1.5rem; /* Adjust size as needed */
+        .section-title {
+            color: #007bff;
+            margin-bottom: 40px;
+            font-weight: 700;
         }
-        .heart-icon.text-danger {
-            color: #dc3545; /* Red for active wishlist item */
-        }
-        .heart-icon:hover {
-            color: #e04e4e; /* Slightly darker red on hover */
-        }
-
-
-        /* Footer */
         .footer-amazon {
-            background-color: #232f3e; /* Dark gray for footer */
+            background-color: #232f3e;
             color: white;
             padding: 40px 0;
             font-size: 0.9rem;
+            margin-top: 50px;
         }
         .footer-amazon a {
             color: #ddd;
@@ -258,19 +280,16 @@ if ($is_logged_in) {
             text-decoration: underline;
             color: white;
         }
-        /* Removed .back-to-top styles as per request */
-
-        /* Custom Toast Notification */
         .custom-toast {
             position: fixed;
             top: 20px;
             right: 20px;
-            background-color: #28a745; /* Green for success */
+            background-color: #28a745;
             color: white;
             padding: 10px 20px;
             border-radius: 5px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 1050; /* Above Bootstrap modals */
+            z-index: 1050;
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
@@ -314,7 +333,7 @@ if ($is_logged_in) {
                             <ul class="dropdown-menu" aria-labelledby="navbarDropdownAccount">
                                 <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
                                 <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
-                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li> <!-- MODIFICADO: Redirecciona a deseos.php -->
+                                <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
                                 <li><hr class="dropdown-divider bg-secondary"></li>
                                 <li><a class="dropdown-item" href="logout.php">Cerrar Sesión</a></li>
                             </ul>
@@ -369,7 +388,7 @@ if ($is_logged_in) {
             <ul class="list-group list-group-flush">
                 <li class="list-group-item"><a href="cuenta.php" class="text-decoration-none text-dark">Mi Cuenta</a></li>
                 <li class="list-group-item"><a href="pedidos.php" class="text-decoration-none text-dark">Mis Pedidos</a></li>
-                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li> <!-- MODIFICADO: Redirecciona a deseos.php -->
+                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li>
                 <li class="list-group-item"><a href="#">Servicio al Cliente</a></li>
                 <li class="list-group-item"><a href="#">Idioma</a></li>
                 <li class="list-group-item"><a href="logout.php">Cerrar Sesión</a></li>
@@ -380,57 +399,49 @@ if ($is_logged_in) {
     <!-- Custom Toast Notification Element -->
     <div id="customToast" class="custom-toast"></div>
 
-    <!-- Main Content -->
+    <!-- Main Content for Wishlist Page -->
     <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
+        <h2 class="text-center section-title">Mi Lista de Deseos</h2>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            <?php if (empty($products)): ?>
-                <div class="col-12">
-                    <div class="alert alert-warning text-center" role="alert">
-                        No se encontraron productos.
-                    </div>
-                </div>
-            <?php else: ?>
-                <?php foreach ($products as $product): ?>
-                    <div class="col">
-                        <div class="card h-100">
-                            <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/400x300/F0F0F0/333?text=Imagen+No+Disponible';">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h5 class="card-title mb-0"><?php echo htmlspecialchars($product['nombre']); ?></h5>
-                                    <?php
-                                    $is_in_wishlist = isset($user_wishlist_product_ids[$product['id']]);
-                                    $heart_class = $is_in_wishlist ? 'fas text-danger' : 'far';
-                                    ?>
-                                    <i class="heart-icon fa-heart <?php echo $heart_class; ?> fa-lg cursor-pointer" data-product-id="<?php echo htmlspecialchars($product['id']); ?>" title="Añadir a lista de deseos"></i>
-                                </div>
-                                <p class="card-text text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?></p>
-                                <div class="mt-auto">
-                                    <p class="mb-1 product-brand">Marca: <?php echo htmlspecialchars($product['marca']); ?></p>
-                                    <p class="product-price">S/ <?php echo number_format($product['precio'], 2); ?></p>
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="wishlist-container">
+                    <?php echo $message; // Muestra mensajes de error o si la lista está vacía ?>
+
+                    <?php if (!empty($wishlist_products)): ?>
+                        <?php foreach ($wishlist_products as $product): ?>
+                            <div class="wishlist-item-card">
+                                <img src="<?php echo htmlspecialchars($product['ruta_imagen']); ?>" alt="<?php echo htmlspecialchars($product['nombre']); ?>" onerror="this.onerror=null;this.src='https://placehold.co/100x100/F0F0F0/333?text=No+Img';">
+                                <div class="wishlist-item-details">
+                                    <h5><?php echo htmlspecialchars($product['nombre']); ?></h5>
+                                    <p class="text-muted small"><?php echo htmlspecialchars($product['descripcion']); ?></p>
+                                    <p class="price">S/ <?php echo number_format($product['precio'], 2); ?></p>
                                     <?php if ($product['stock_quantity'] == 0): ?>
                                         <span class="out-of-stock-badge">Sin existencias</span>
-                                        <button type="button" class="btn btn-add-to-cart w-100 mt-2" disabled>
-                                            Agotado
-                                        </button>
                                     <?php else: ?>
-                                        <!-- Formulario para añadir al carrito, ahora envía a agregar_producto.php -->
-                                        <form action="agregar_producto.php" method="POST">
+                                        <p class="text-success small">En stock (<?php echo htmlspecialchars($product['stock_quantity']); ?> unidades)</p>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="wishlist-item-actions">
+                                    <button type="button" class="btn btn-remove-wishlist" data-product-id="<?php echo htmlspecialchars($product['id']); ?>">
+                                        Eliminar
+                                    </button>
+                                    <?php if ($product['stock_quantity'] > 0): ?>
+                                        <form action="agregar_producto.php" method="POST" class="d-inline">
                                             <input type="hidden" name="action" value="add">
                                             <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['id']); ?>">
-                                            <input type="hidden" name="quantity" value="1"> <!-- Añade 1 por defecto -->
-                                            <button type="submit" class="btn btn-add-to-cart w-100">
+                                            <input type="hidden" name="quantity" value="1">
+                                            <button type="submit" class="btn btn-add-to-cart-wishlist">
                                                 Añadir al Carrito
                                             </button>
                                         </form>
                                     <?php endif; ?>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -498,23 +509,11 @@ if ($is_logged_in) {
                 }, 3000); // Hide after 3 seconds
             }
 
-            // Get any message passed from PHP (e.g., from finalizar_compra.php)
-            const urlParams = new URLSearchParams(window.location.search);
-            const phpMessage = urlParams.get('msg');
-            if (phpMessage) {
-                showToast(decodeURIComponent(phpMessage), 'success'); // Assuming messages from PHP are usually success
-                // Clear the 'msg' parameter from the URL after showing the toast
-                const newUrl = new URL(window.location.href);
-                newUrl.searchParams.delete('msg');
-                window.history.replaceState({}, document.title, newUrl.toString());
-            }
-
-
-            // Add event listeners for wishlist heart icons
-            document.querySelectorAll('.heart-icon').forEach(icon => {
-                icon.addEventListener('click', function() {
+            // Add event listeners for "Eliminar" buttons
+            document.querySelectorAll('.btn-remove-wishlist').forEach(button => {
+                button.addEventListener('click', function() {
                     const productId = this.dataset.productId;
-                    const currentIcon = this;
+                    const itemCard = this.closest('.wishlist-item-card'); // Get the parent card element
 
                     fetch('agregar_deseo.php', {
                         method: 'POST',
@@ -525,20 +524,22 @@ if ($is_logged_in) {
                     })
                     .then(response => response.json())
                     .then(data => {
-                        if (data.success) {
-                            if (data.action === 'added') {
-                                currentIcon.classList.remove('far');
-                                currentIcon.classList.add('fas', 'text-danger');
-                                showToast('Producto añadido a tu lista de deseos.', 'success');
-                            } else if (data.action === 'removed') {
-                                currentIcon.classList.remove('fas', 'text-danger');
-                                currentIcon.classList.add('far');
-                                showToast('Producto eliminado de tu lista de deseos.', 'info');
+                        if (data.success && data.action === 'removed') {
+                            showToast('Producto eliminado de tu lista de deseos.', 'info');
+                            // Remove the item card from the DOM
+                            if (itemCard) {
+                                itemCard.remove();
+                            }
+                            // Check if wishlist is now empty and display message
+                            if (document.querySelectorAll('.wishlist-item-card').length === 0) {
+                                const wishlistContainer = document.querySelector('.wishlist-container');
+                                if (wishlistContainer) {
+                                    wishlistContainer.innerHTML = "<div class='alert alert-info text-center' role='alert'>Tu lista de deseos está vacía.</div>";
+                                }
                             }
                         } else {
-                            showToast(data.message || 'Error al actualizar la lista de deseos.', 'danger');
+                            showToast(data.message || 'Error al eliminar de la lista de deseos.', 'danger');
                             if (data.redirect_to_login) {
-                                // Redirect to login after a short delay if requested by PHP
                                 setTimeout(() => { window.location.href = 'login.php?redirect_to=' + encodeURIComponent(window.location.href); }, 1500);
                             }
                         }

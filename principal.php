@@ -8,19 +8,32 @@ if (!isset($_SESSION['usuario'])) {
 include("config.php");
 
 $usuario = $_SESSION['usuario'];
-// Es buena práctica obtener el rol de la base de datos si es crítico, pero para el display del sidebar,
-// podemos confiar en la sesión si se establece correctamente al inicio de la sesión.
-$rolUsuario = $_SESSION['rol'] ?? 'usuario'; // Asegúrate de que el rol se guarde en la sesión al iniciar.
+// Obtener el rol y nombre completo del usuario
+$sql_user_info = "SELECT per.nombre || ' ' || per.apellido_paterno AS nombre_completo, r.nombre AS rol
+                  FROM usuario_empleado ue
+                  JOIN persona per ON ue.persona_id = per.persona_id
+                  JOIN rol r ON ue.rol_id = r.rol_id
+                  WHERE ue.usuario = :usuario";
+$stmt_user_info = $pdo->prepare($sql_user_info);
+$stmt_user_info->execute([':usuario' => $usuario]);
+$user_info = $stmt_user_info->fetch(PDO::FETCH_ASSOC);
 
-$nombre_persona = 'Usuario';
+$nombre_persona = $user_info['nombre_completo'] ?? 'Usuario';
+$rolUsuario = strtolower($user_info['rol'] ?? 'usuario'); // Default to 'usuario' if not found
 
-$sql = "SELECT per.nombre || ' ' || per.apellido_paterno AS nombre_completo
-        FROM usuario_empleado ue
-        JOIN persona per ON ue.persona_id = per.persona_id
-        WHERE ue.usuario = :usuario";
-$stmt = $pdo->prepare($sql);
-$stmt->execute([':usuario' => $usuario]);
-$nombre_persona = $stmt->fetchColumn();
+// Lógica para obtener comunicados del sistema
+$comunicados = [];
+try {
+    // Asume que tienes una tabla 'comunicados' con columnas 'comunicado_id', 'titulo', 'contenido', 'fecha_publicacion' y 'activo'
+    $sql_comunicados = "SELECT comunicado_id, titulo, contenido, fecha_publicacion FROM comunicados WHERE activo = TRUE ORDER BY fecha_publicacion DESC";
+    $stmt_comunicados = $pdo->query($sql_comunicados);
+    $comunicados = $stmt_comunicados->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar comunicados: " . $e->getMessage());
+    // Puedes mostrar un mensaje al usuario si lo deseas, o simplemente no mostrar comunicados
+    // $mensaje_comunicados = "<div class='alert alert-danger'>Error al cargar los comunicados del sistema.</div>";
+}
+
 
 // Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
@@ -178,35 +191,39 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 
             <a href="principal.php" class="<?= ($currentPage === 'principal') ? 'current-page' : '' ?>">Inicio</a>
 
-            <a href="#" id="catalogoToggle"
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
-                <a href="gestion_catalogo_categorias.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
-                <a href="gestion_catalogo_productos.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
-                <a href="gestion_catalogo_proveedores.php"
-                   class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
-            </div>
+            <?php if ($rolUsuario === 'admin'): // Solo para administradores ?>
+                <a href="#" id="catalogoToggle"
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'current-page' : '' ?>">Gestión de Catálogo</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_catalogo') !== false) ? 'active' : '' ?>" id="catalogoSubmenu">
+                    <a href="gestion_catalogo_categorias.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_categorias') ? 'current-page' : '' ?>">Categorías</a>
+                    <a href="gestion_catalogo_productos.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_productos') ? 'current-page' : '' ?>">Productos</a>
+                    <a href="gestion_catalogo_proveedores.php"
+                       class="<?= ($currentPage === 'gestion_catalogo_proveedores') ? 'current-page' : '' ?>">Proveedores</a>
+                </div>
+                
+                <a href="gestion_usuarios.php"
+                   class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
+            <?php endif; ?>
             
-            <a href="gestion_usuarios.php"
-               class="<?= ($currentPage === 'gestion_usuarios') ? 'current-page' : '' ?>">Gestión de Usuarios</a>
-            
-            <a href="#" id="existenciasToggle" 
-               class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
-            <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
-                <a href="gestion_existencias_pedidos.php"
-                   class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
-                <a href="gestion_existencias_ventas.php"
-                   class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
-                <a href="gestion_existencias_devoluciones.php"
-                   class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
-                <a href="gestion_existencias_stock.php"
-                   class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
-            </div>
-            
-            <a href="configuracion.php"
-               class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php if ($rolUsuario === 'admin' || $rolUsuario === 'empleado'): // Para administradores y empleados ?>
+                <a href="#" id="existenciasToggle" 
+                   class="sidebar-link <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'current-page' : '' ?>">Gestión de Existencias</a>
+                <div class="submenu <?= (strpos($currentPage, 'gestion_existencias') !== false) ? 'active' : '' ?>" id="existenciasSubmenu">
+                    <a href="gestion_existencias_pedidos.php"
+                       class="<?= ($currentPage === 'gestion_existencias_pedidos') ? 'current-page' : '' ?>">Pedidos</a>
+                    <a href="gestion_existencias_ventas.php"
+                       class="<?= ($currentPage === 'gestion_existencias_ventas') ? 'current-page' : '' ?>">Ventas</a>
+                    <a href="gestion_existencias_devoluciones.php"
+                       class="<?= ($currentPage === 'gestion_existencias_devoluciones') ? 'current-page' : '' ?>">Devoluciones</a>
+                    <a href="gestion_existencias_stock.php"
+                       class="<?= ($currentPage === 'gestion_existencias_stock') ? 'current-page' : '' ?>">Stock</a>
+                </div>
+                
+                <a href="configuracion.php"
+                   class="<?= ($currentPage === 'configuracion') ? 'current-page' : '' ?>">Configuración</a>
+            <?php endif; ?>
 
             <div class="mt-4 text-center">
                 <a href="salir.php" class="btn btn-outline-danger w-100">Cerrar Sesión</a>
@@ -214,28 +231,27 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
         </div>
 
         <div class="col-md-10 content">
-            <h2 class="main-title mb-4">Comunicados del Sistema</h2>
+            <h2 class="main-title mb-4">Comunicados del Sistema
+                <?php if ($rolUsuario === 'admin'): ?>
+                    <a href="gestion_comunicados.php" class="btn btn-primary btn-sm ms-3">Editar Comunicados</a>
+                <?php endif; ?>
+            </h2>
 
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h5 class="card-title text-primary">📢 Mantenimiento programado</h5>
-                    <p class="card-text">El sistema estará en mantenimiento el sábado 8 de junio desde las 10:00 p.m. hasta las 2:00 a.m.</p>
+            <?php if (!empty($comunicados)): ?>
+                <?php foreach ($comunicados as $comunicado): ?>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary">📢 <?= htmlspecialchars($comunicado['titulo']) ?></h5>
+                            <p class="card-text"><?= nl2br(htmlspecialchars($comunicado['contenido'])) ?></p>
+                            <p class="card-text"><small class="text-muted">Publicado el: <?= date('d/m/Y H:i', strtotime($comunicado['fecha_publicacion'])) ?></small></p>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="alert alert-info" role="alert">
+                    No hay comunicados del sistema disponibles en este momento.
                 </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h5 class="card-title text-success">✅ Nuevas funcionalidades</h5>
-                    <p class="card-text">Se ha habilitado la opción de gestionar devoluciones desde el panel de existencias.</p>
-                </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-body">
-                    <h5 class="card-title text-danger">🚨 Importante</h5>
-                    <p class="card-text">Recuerda cerrar sesión al terminar tus actividades para proteger tu información.</p>
-                </div>
-            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -279,7 +295,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
              });
         }
 
-        // Lógica para el Modo Oscuro
+        // Lógica para el Modo Oscuro (si existe el switch en esta página)
         const darkModeSwitch = document.getElementById('darkModeSwitch');
         const body = document.body;
 

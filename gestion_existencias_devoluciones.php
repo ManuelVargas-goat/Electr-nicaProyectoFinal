@@ -102,13 +102,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             ':producto_id' => $productoId
         ]);
 
-        // Opcional: Actualizar el estado de la devolución o el detalle de devolución si es necesario
-        // Por ejemplo, si tienes un campo 'estado_procesado' en 'detalle_devolucion'
-        // $stmtUpdateDetalleDevolucion = $pdo->prepare("UPDATE detalle_devolucion SET procesado = TRUE WHERE devolucion_id = :devolucion_id AND producto_id = :producto_id");
-        // $stmtUpdateDetalleDevolucion->execute([':devolucion_id' => $devolucionId, ':producto_id' => $productoId]);
+        // NUEVO: Actualizar el flag reingresado_stock en la tabla detalle_devolucion
+        // Esto asegura que el valor mostrado en la tabla sea consistente con la acción de procesamiento.
+        $stmtUpdateDetalleDevolucionFlag = $pdo->prepare("UPDATE detalle_devolucion SET reingresado_stock = :reingresado_stock WHERE devolucion_id = :devolucion_id AND producto_id = :producto_id");
+        $stmtUpdateDetalleDevolucionFlag->execute([
+            ':reingresado_stock' => $reingresadoStock,
+            ':devolucion_id' => $devolucionId,
+            ':producto_id' => $productoId
+        ]);
 
         $pdo->commit();
-        $_SESSION['modal_message'] = "Stock actualizado para la devolución #" . htmlspecialchars($devolucionId) . ".";
+        $_SESSION['modal_message'] = "Stock y estado de reingreso actualizados para la devolución #" . htmlspecialchars($devolucionId) . ".";
         $_SESSION['modal_type'] = ALERT_SUCCESS;
 
     } catch (Exception $e) {
@@ -446,9 +450,6 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                         $alertClass = 'alert-warning';
                         break;
                     case 'info':
-                        $alertClass = 'alert-info';
-                        break;
-                    default:
                         $alertClass = 'alert-info'; // Tipo predeterminado si no coincide
                 }
                 echo '<div class="alert ' . $alertClass . ' alert-dismissible fade show mt-3" role="alert" style="margin-left: -20px; margin-right: -20px; width: calc(100% + 40px);">';
@@ -459,7 +460,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             ?>
 
             <div class="mb-3">
-                <a href="nueva_devolucion.php" class="btn btn-success">+ Generar Devolución</a>
+                <a href="nueva_devolucion.php" class="btn btn-primary">+ Generar Devolución</a>
             </div>
 
             <form class="row gx-2 mb-4 align-items-end" method="GET">

@@ -453,7 +453,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             ?>
 
             <div class="mb-3">
-                <a href="nuevo_pedido.php" class="btn btn-success">➕ Generar Nuevo Pedido</a>
+                <a href="nuevo_pedido.php" class="btn btn-primary"><span style="color: black;">➕</span> Generar Nuevo Pedido</a>
             </div>
 
             <form class="row g-2 mb-3" method="GET">

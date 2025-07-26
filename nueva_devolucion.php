@@ -39,7 +39,7 @@ $csrf_token = $_SESSION['csrf_token'];
 // --- Consulta de Pedidos (Simplificada para solo mostrar "entregados" sin texto adicional) ---
 $sqlPedidos = "
     SELECT p.pedido_id, TO_CHAR(p.fecha_pedido, 'YYYY-MM-DD HH24:MI:SS') AS fecha_formateada,
-           '' AS tipo_pedido_reingreso -- Siempre una cadena vacía, eliminando cualquier texto adicional
+            '' AS tipo_pedido_reingreso -- Siempre una cadena vacía, eliminando cualquier texto adicional
     FROM pedido p
     WHERE p.estado = 'entregado' -- Solo pedidos en estado 'entregado'
     ORDER BY p.pedido_id DESC
@@ -68,8 +68,8 @@ $sqlRelaciones = "
     -- Unir a devolucion y detalle_devolucion para calcular las cantidades ya devueltas
     LEFT JOIN devolucion dev ON dev.pedido_original_id = dp.pedido_id
     LEFT JOIN detalle_devolucion ddet ON ddet.devolucion_id = dev.devolucion_id
-                                     AND ddet.producto_id = dp.producto_id
-                                     AND ddet.proveedor_id = dp.proveedor_id
+                                       AND ddet.producto_id = dp.producto_id
+                                       AND ddet.proveedor_id = dp.proveedor_id
 
     WHERE p.estado = 'entregado' -- Solo pedidos en estado 'entregado'
     GROUP BY dp.pedido_id, prod.producto_id, prod.nombre, dp.proveedor_id, prov.nombre_empresa, dp.cantidad
@@ -150,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 2. Insertar en la tabla detalle_devolucion
         $sqlDetalle = "INSERT INTO detalle_devolucion (devolucion_id, producto_id, proveedor_id, cantidad, motivo, reingresado_stock)
-                       VALUES (:devolucion_id, :producto_id, :proveedor_id, :cantidad, :motivo, :reingresado)";
+                        VALUES (:devolucion_id, :producto_id, :proveedor_id, :cantidad, :motivo, :reingresado)";
         $stmt = $pdo->prepare($sqlDetalle);
         $stmt->execute([
             ':devolucion_id' => $devolucionId,
@@ -158,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':proveedor_id' => $proveedorId,
             ':cantidad' => $cantidad,
             ':motivo' => $motivo,
-            ':reingresado' => 'false' // Para devoluciones a proveedor, no se "reingresa" stock
+            ':reingresado' => $reingresado // <--- CAMBIO CLAVE AQUÍ: Usa el valor del checkbox
         ]);
 
         // 3. ¡ACTUALIZAR EL STOCK! (Decremento para devoluciones a proveedor)

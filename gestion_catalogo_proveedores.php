@@ -44,17 +44,64 @@ if (isset($_SESSION['modal_message']) && !empty($_SESSION['modal_message'])) {
     $tipoMensaje = $_GET['tipo'] ?? 'info'; // 'info' como tipo predeterminado si no se especifica
 }
 
+// --- Obtener todas las categorías para el desplegable de filtro ---
+$todas_las_categorias_filtro = [];
+try {
+    $stmtCategoriasFiltro = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
+    $todas_las_categorias_filtro = $stmtCategoriasFiltro->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar categorías para filtro: " . $e->getMessage());
+    $todas_las_categorias_filtro = [];
+}
+
 // Filtros de búsqueda
-$filtro = $_GET['filtro'] ?? '';
-$sqlProveedores = "SELECT proveedor_id, nombre_empresa, pais, ciudad, direccion, codigo_postal FROM proveedor
-                    WHERE CAST(proveedor_id AS TEXT) ILIKE :filtro OR nombre_empresa ILIKE :filtro
-                    ORDER BY proveedor_id DESC";
+$filtroTexto = $_GET['filtro'] ?? ''; // Renombrado de $filtro a $filtroTexto para mayor claridad
+$filtroCategoria = $_GET['categoria'] ?? ''; // Nuevo filtro por categoría
 
-$stmtProv = $pdo->prepare($sqlProveedores);
-$stmtProv->execute([':filtro' => "%$filtro%"]);
-$proveedores = $stmtProv->fetchAll(PDO::FETCH_ASSOC); // Usar FETCH_ASSOC
+$whereClauses = [];
+$params = [];
 
-// --- NUEVA LÓGICA PARA OBTENER LAS CATEGORÍAS DE CADA PROVEEDOR ---
+// Filtro por texto (ID o nombre de empresa)
+if (!empty($filtroTexto)) {
+    $whereClauses[] = "(CAST(p.proveedor_id AS TEXT) ILIKE :filtroTexto OR p.nombre_empresa ILIKE :filtroTexto)";
+    $params[':filtroTexto'] = "%$filtroTexto%";
+}
+
+// Filtro por categoría (si se seleccionó una)
+if (!empty($filtroCategoria)) {
+    $whereClauses[] = "c.nombre = :filtroCategoria";
+    $params[':filtroCategoria'] = $filtroCategoria;
+}
+
+$whereString = '';
+if (!empty($whereClauses)) {
+    $whereString = 'WHERE ' . implode(' AND ', $whereClauses);
+}
+
+// Consulta principal para obtener proveedores con filtros
+// Se usa DISTINCT para evitar duplicados si un proveedor tiene múltiples categorías y se filtra por categoría
+$sqlProveedores = "
+    SELECT DISTINCT p.proveedor_id, p.nombre_empresa, p.pais, p.ciudad, p.direccion, p.codigo_postal
+    FROM proveedor p
+    LEFT JOIN proveedor_categoria pc ON p.proveedor_id = pc.proveedor_id
+    LEFT JOIN categoria c ON pc.categoria_id = c.categoria_id
+    {$whereString}
+    ORDER BY p.proveedor_id DESC
+";
+
+try {
+    $stmtProv = $pdo->prepare($sqlProveedores);
+    $stmtProv->execute($params);
+    $proveedores = $stmtProv->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error en consulta de proveedores: " . $e->getMessage());
+    $proveedores = [];
+    $mensaje = "Error al cargar los proveedores: " . $e->getMessage();
+    $tipoMensaje = "danger";
+}
+
+
+// --- LÓGICA PARA OBTENER LAS CATEGORÍAS DE CADA PROVEEDOR (para mostrar en la tabla) ---
 $proveedorCategorias = [];
 if (!empty($proveedores)) {
     $stmtCategorias = $pdo->prepare("
@@ -71,7 +118,7 @@ if (!empty($proveedores)) {
         $proveedorCategorias[$prov['proveedor_id']] = implode(', ', $categorias); 
     }
 }
-// --- FIN DE NUEVA LÓGICA ---
+// --- FIN DE LÓGICA PARA OBTENER CATEGORÍAS POR PROVEEDOR ---
 
 // Variable para el nombre del archivo actual (sin la extensión .php)
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
@@ -296,12 +343,24 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
             <div class="d-flex justify-content-between mb-3">
                 <form class="d-flex flex-grow-1 me-3" method="GET" action="">
                     <div class="row g-2 align-items-center w-100">
-                        <div class="col-md-6"> <input type="text" name="filtro" class="form-control" placeholder="Buscar por ID o Empresa" value="<?= htmlspecialchars($filtro) ?>">
+                        <div class="col-md-4"> <!-- Ajustado a 4 columnas para el input de texto -->
+                            <input type="text" name="filtro" class="form-control" placeholder="Buscar por ID o Empresa" value="<?= htmlspecialchars($filtroTexto) ?>">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4"> <!-- Nueva columna para el desplegable de categoría -->
+                            <select name="categoria" class="form-select">
+                                <option value="">Todas las Categorías</option>
+                                <?php foreach ($todas_las_categorias_filtro as $cat): ?>
+                                    <option value="<?= htmlspecialchars($cat['nombre']) ?>"
+                                        <?= ($cat['nombre'] === $filtroCategoria) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($cat['nombre']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-2"> <!-- Ajustado a 2 columnas para el botón Buscar -->
                             <button class="btn btn-primary w-100" type="submit">Buscar</button>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2"> <!-- Ajustado a 2 columnas para el botón Limpiar -->
                             <a href="gestion_catalogo_proveedores.php" class="btn btn-secondary w-100">Limpiar</a>
                         </div>
                     </div>
@@ -339,11 +398,11 @@ $currentPage = basename($_SERVER['PHP_SELF'], ".php");
                                         <div class="d-flex justify-content-center gap-2">
                                             <a href="editar_proveedor.php?id=<?= htmlspecialchars($prov['proveedor_id']) ?>" class="btn btn-sm btn-info">Editar</a>
                                             <button type="button"
-                                                     class="btn btn-sm btn-danger delete-btn"
-                                                     data-bs-toggle="modal"
-                                                     data-bs-target="#confirmDeleteProveedorModal"
-                                                     data-id="<?= htmlspecialchars($prov['proveedor_id']) ?>"
-                                                     data-nombre="<?= htmlspecialchars($prov['nombre_empresa']) ?>">
+                                                    class="btn btn-sm btn-danger delete-btn"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#confirmDeleteProveedorModal"
+                                                    data-id="<?= htmlspecialchars($prov['proveedor_id']) ?>"
+                                                    data-nombre="<?= htmlspecialchars($prov['nombre_empresa']) ?>">
                                                     Eliminar
                                             </button>
                                         </div>

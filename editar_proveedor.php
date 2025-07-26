@@ -1,10 +1,36 @@
 <?php
-session_start(); // Inicia la sesión al principio
+session_start();
 include("config.php"); // Asegúrate de que 'config.php' contenga la conexión PDO.
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: login.php");
     exit();
+}
+
+// Obtener datos del usuario actual
+$usuario = $_SESSION['usuario'];
+$sql_usuario = "SELECT per.nombre, per.apellido_paterno, r.nombre AS rol
+                FROM usuario_empleado ue
+                JOIN persona per ON ue.persona_id = per.persona_id
+                JOIN rol r ON ue.rol_id = r.rol_id
+                WHERE ue.usuario = :usuario";
+$stmt = $pdo->prepare($sql_usuario);
+$stmt->execute([':usuario' => $usuario]);
+$datosUsuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$nombreCompleto = htmlspecialchars($datosUsuario['nombre'] . ' ' . $datosUsuario['apellido_paterno']);
+$rolUsuario = strtolower(htmlspecialchars($datosUsuario['rol']));
+
+// --- Obtener todas las categorías para el SELECT y para los checkboxes de categorías ---
+$todas_las_categorias = [];
+try {
+    $stmtCategorias = $pdo->query("SELECT categoria_id, nombre FROM categoria ORDER BY nombre");
+    $todas_las_categorias = $stmtCategorias->fetchAll(PDO::FETCH_ASSOC); // Fetch all for checkboxes
+    $categorias = array_column($todas_las_categorias, 'nombre'); // Just names for the select filter
+} catch (PDOException $e) {
+    error_log("Error al cargar categorías: " . $e->getMessage());
+    $categorias = []; // Asegura que $categorias sea un array vacío si falla
+    $todas_las_categorias = [];
 }
 
 // Validar que se reciba un ID de proveedor válido
@@ -51,6 +77,18 @@ try {
     $formError = "Error al cargar la lista de personas: " . $e->getMessage();
 }
 
+// Obtener las categorías actualmente asociadas a este proveedor
+$categorias_asociadas_al_proveedor = [];
+try {
+    $stmtProveedorCategorias = $pdo->prepare("SELECT categoria_id FROM proveedor_categoria WHERE proveedor_id = :proveedor_id");
+    $stmtProveedorCategorias->execute([':proveedor_id' => $proveedor_id]);
+    $categorias_asociadas_al_proveedor = $stmtProveedorCategorias->fetchAll(PDO::FETCH_COLUMN, 0);
+} catch (PDOException $e) {
+    error_log("Error al cargar categorías asociadas al proveedor: " . $e->getMessage());
+    // No establecer $formError aquí para no sobrescribir otros errores, solo loguear.
+}
+
+
 // Inicializar variables con los datos del proveedor o con valores de POST si se envió el formulario
 $nombre_empresa = $proveedor['nombre_empresa'];
 $persona_id_selected = $proveedor['persona_id']; // El ID de la persona ya asociada al proveedor
@@ -79,6 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ciudad_selected = trim($_POST['ciudad'] ?? '');
     $direccion = trim($_POST['direccion'] ?? '');
     $codigo_postal = trim($_POST['codigo_postal'] ?? '');
+    $categorias_suministradas = $_POST['categorias_suministradas'] ?? [];
+    $categorias_suministradas = array_map('intval', $categorias_suministradas);
+
 
     // Validaciones
     if (empty($nombre_empresa)) {
@@ -93,6 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formError = "La dirección es obligatoria.";
     } else {
         try {
+            $pdo->beginTransaction();
+
             $sql = "UPDATE proveedor
                     SET nombre_empresa = :nombre_empresa,
                         persona_id = :persona_id,
@@ -112,20 +155,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id' => $proveedor_id
             ]);
 
+            // Actualizar categorías asociadas:
+            // 1. Eliminar asociaciones existentes para este proveedor
+            $sql_delete_pc = "DELETE FROM proveedor_categoria WHERE proveedor_id = :proveedor_id";
+            $stmt_delete_pc = $pdo->prepare($sql_delete_pc);
+            $stmt_delete_pc->execute([':proveedor_id' => $proveedor_id]);
+
+            // 2. Insertar nuevas asociaciones
+            if (!empty($categorias_suministradas)) {
+                $sql_insert_pc = "INSERT INTO proveedor_categoria (proveedor_id, categoria_id) VALUES (:proveedor_id, :categoria_id)";
+                $stmt_insert_pc = $pdo->prepare($sql_insert_pc);
+                foreach ($categorias_suministradas as $cat_id) {
+                    $stmt_insert_pc->execute([
+                        ':proveedor_id' => $proveedor_id,
+                        ':categoria_id' => $cat_id
+                    ]);
+                }
+            }
+
+            $pdo->commit();
             // Establecer mensaje de éxito en la sesión y redirigir
             $_SESSION['modal_message'] = "Proveedor actualizado con éxito.";
             $_SESSION['modal_type'] = "success";
             header("Location: gestion_catalogo_proveedores.php");
             exit();
         } catch (PDOException $e) {
+            $pdo->rollBack();
             // Error de base de datos
             error_log("Error al actualizar el proveedor en DB: " . $e->getMessage());
             $formError = "Error al actualizar el proveedor: " . $e->getMessage(); // Muestra el error en el formulario
-            // También puedes enviar esto a la sesión para mostrarlo en la página de gestión si prefieres:
-            // $_SESSION['modal_message'] = "Error al actualizar el proveedor.";
-            // $_SESSION['modal_type'] = "danger";
-            // header("Location: gestion_catalogo_proveedores.php");
-            // exit();
         }
     }
 }
@@ -181,6 +239,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #f8f9fa;
             border-color: #889299;
             box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25);
+        }
+        .checkbox-group {
+            border: 1px solid #ced4da;
+            border-radius: .25rem;
+            padding: .75rem 1rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .dark-mode .checkbox-group {
+            background-color: #6c757d;
+            border-color: #495057;
         }
     </style>
 </head>
@@ -272,6 +341,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="mb-3">
+            <label class="form-label">Categorías que puede suministrar:</label>
+            <input type="text" id="categoriaSearch" class="form-control mb-2" placeholder="Buscar categoría...">
+            <div class="checkbox-group" id="categoriasCheckboxGroup">
+                <?php if (empty($todas_las_categorias)): ?>
+                    <p class="text-muted">No hay categorías disponibles. Por favor, agregue categorías primero.</p>
+                <?php else: ?>
+                    <?php foreach ($todas_las_categorias as $categoria): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                name="categorias_suministradas[]" 
+                                value="<?= htmlspecialchars($categoria['categoria_id']) ?>" 
+                                id="categoria_<?= htmlspecialchars($categoria['categoria_id']) ?>"
+                                <?= in_array($categoria['categoria_id'], $categorias_asociadas_al_proveedor) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="categoria_<?= htmlspecialchars($categoria['categoria_id']) ?>">
+                                <?= htmlspecialchars($categoria['nombre']) ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="mb-3">
             <label for="pais" class="form-label">País</label>
             <select name="pais" id="pais" class="form-select" required>
                 <option value="">Seleccione un país</option>
@@ -353,6 +445,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const btnEliminarPersona = document.getElementById('btnEliminarPersona');
     const proveedorId = <?= json_encode($proveedor_id); ?>;
 
+    // Elementos para la búsqueda de categorías
+    const categoriaSearchInput = document.getElementById('categoriaSearch');
+    const categoriasCheckboxGroup = document.getElementById('categoriasCheckboxGroup');
+
     function actualizarCiudades() {
         const paisSeleccionado = paisSelect.value;
         ciudadSelect.innerHTML = '<option value="">Seleccione una ciudad</option>';
@@ -420,9 +516,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    function filterCategories() {
+        const searchTerm = categoriaSearchInput.value.toLowerCase();
+        const categoryItems = categoriasCheckboxGroup.querySelectorAll('.form-check');
+
+        categoryItems.forEach(item => {
+            const label = item.querySelector('.form-check-label');
+            const categoryName = label ? label.textContent.toLowerCase() : '';
+            
+            if (categoryName.includes(searchTerm)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
     // Event Listeners
     paisSelect.addEventListener('change', actualizarCiudades);
     personaSelect.addEventListener('change', actualizarBotonesPersona);
+    categoriaSearchInput.addEventListener('keyup', filterCategories); // Listener para el filtro de categorías
+
 
     // Call functions on DOM load to set initial state
     document.addEventListener('DOMContentLoaded', function() {
@@ -432,9 +546,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ciudadSelect.innerHTML = '<option value="">Seleccione un país primero</option>';
         }
         actualizarBotonesPersona(); // Llama a la función para establecer el estado inicial de los botones
-                                   // Esto asegura que el texto se muestre correctamente al cargar la página
-                                   // si ya hay una persona seleccionada.
-
+                                    // Esto asegura que el texto se muestre correctamente al cargar la página
+                                    // si ya hay una persona seleccionada.
+        
         // Dark mode logic
         const body = document.body;
         if (localStorage.getItem('darkMode') === 'enabled') {
