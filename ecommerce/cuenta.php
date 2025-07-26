@@ -84,17 +84,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_datos'])) {
         $message = "<div class='alert alert-danger text-center' role='alert'>Por favor, complete los campos obligatorios (Direccion y Telefono).</div>";
     } else {
         try {
+
             $sqlUpdate = "UPDATE persona SET
                           direccion = :direccion,
                           telefono = :telefono
-                          WHERE persona_id = :persona_id";
-
+                               WHERE persona_id = :persona_id";
             $stmtUpdate = $conn->prepare($sqlUpdate);
-            $stmtUpdate->bindParam(':direccion', $direccion);
-            $stmtUpdate->bindParam(':telefono', $telefono);
-            $stmtUpdate->bindParam(':persona_id', $ID_usuario, PDO::PARAM_INT);
-
-            if ($stmtUpdate->execute()) {
+            if (
+                $stmtUpdate->execute([
+                    ':direccion' => $direccion,
+                    ':telefono' => $telefono,
+                    ':persona_id' => $ID_usuario
+                ])
+            ) {
                 header("Location: cuenta.php");
                 $message = "<div class='alert alert-success text-center' role='alert'>¡Perfil actualizado con éxito!</div>";
             } else {
@@ -109,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_datos'])) {
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_email'])) {
 
     // Buscamos la clave
-    $stmt = $conn->prepare("SELECT usuario as usuario,  clave as clave
+    $stmt = $conn->prepare("SELECT usuario as usuario,  clave as clave, persona_id
                   FROM usuario_cliente 
                   WHERE usuario_cliente_id = ?");
     $stmt->execute([$usuario_cliente_id]);
@@ -133,15 +135,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_datos'])) {
     } else {
         try {
 
-
-            $sqlUpdateEmail = "UPDATE persona 
-                               SET email = :email 
-                               WHERE persona_id = :persona_id";
+            $sqlUpdateEmail = "UPDATE persona SET email = :email WHERE persona_id = :persona_id";
             $stmtUpdateEmail = $conn->prepare($sqlUpdateEmail);
-            $stmtUpdateEmail->bindParam(':email', $new_email);
-            $stmtUpdateEmail->bindParam(':persona_id', $ID_usuario, PDO::PARAM_INT);
 
-            if ($stmtUpdateEmail->execute()) {
+            if (
+                $stmtUpdateEmail->execute([
+                    ':email' => $new_email,
+                    ':persona_id' => $ID_usuario
+                ])
+            ) {
                 header("Location: cuenta.php");
                 $message = "<div class='alert alert-success text-center' role='alert'>Email cambiado con éxito!</div>";
             } else {
@@ -185,12 +187,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_datos'])) {
             // En una aplicación real, usar password_hash() para almacenar contraseñas de forma segura
             $hashed_password = $new_password;
 
-            $sqlUpdatePassword = "UPDATE usuario_cliente SET clave = :password WHERE persona_id = :persona_id";
+            $sqlUpdatePassword = "UPDATE usuario_cliente SET
+                                  clave = :clave
+                                  WHERE usuario_cliente_id = :usuario_cliente_id";
             $stmtUpdatePassword = $conn->prepare($sqlUpdatePassword);
-            $stmtUpdatePassword->bindParam(':password', $hashed_password);
-            $stmtUpdatePassword->bindParam(':persona_id', $ID_usuario, PDO::PARAM_INT);
-
-            if ($stmtUpdatePassword->execute()) {
+            if (
+                $stmtUpdatePassword->execute([
+                    ':clave' => $hashed_password,
+                    ':usuario_cliente_id' => $usuario_cliente_id
+                ])
+            ) {
                 header("Location: cuenta.php");
                 $message = "<div class='alert alert-success text-center' role='alert'>¡Contraseña cambiada con éxito!</div>";
             } else {
@@ -407,9 +413,12 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                    <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"
+                        style="color: black;" name="q">
+                    <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                </form>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -425,8 +434,11 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                                 <li><a class="dropdown-item" href="cuenta.php">Mi Cuenta</a></li>
                                 <li><a class="dropdown-item" href="pedidos.php">Mis Pedidos</a></li>
                                 <li><a class="dropdown-item" href="deseos.php">Mi Lista de Deseos</a></li>
-                                <li><hr class="dropdown-divider bg-secondary"></li>
-                                <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
+                                <li>
+                                    <hr class="dropdown-divider bg-secondary">
+                                </li>
+                                <li><a class="dropdown-item" href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar
+                                        Sesión</a></li>
                             </ul>
                         <?php endif; ?>
                     </li>
@@ -455,7 +467,8 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <ul class="navbar-nav">
                 <?php foreach ($categories as $category): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"><?php echo htmlspecialchars($category['nombre']); ?></a>
+                        <a class="nav-link"
+                            href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
             </ul>
@@ -474,7 +487,8 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <h6 class="text-uppercase fw-bold mb-3">Comprar por Categoría</h6>
             <ul class="list-group list-group-flush">
                 <?php foreach ($categories as $category): ?>
-                    <li class="list-group-item"><a href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"
+                    <li class="list-group-item"><a
+                            href="Inicio_Principal_Busqueda.php?id=<?php echo $category['categoria_id']; ?>"
                             class="text-decoration-none text-dark"><?php echo htmlspecialchars($category['nombre']); ?></a>
                     </li>
                 <?php endforeach; ?>
@@ -483,12 +497,16 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
             <hr>
             <h6 class="text-uppercase fw-bold mb-3">Ayuda y Configuración</h6>
             <ul class="list-group list-group-flush">
-                <li class="list-group-item"><a href="cuenta.php" class="text-decoration-none text-dark">Mi Cuenta</a></li>
-                <li class="list-group-item"><a href="pedidos.php" class="text-decoration-none text-dark">Mis Pedidos</a></li>
-                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de Deseos</a></li>
+                <li class="list-group-item"><a href="cuenta.php" class="text-decoration-none text-dark">Mi Cuenta</a>
+                </li>
+                <li class="list-group-item"><a href="pedidos.php" class="text-decoration-none text-dark">Mis Pedidos</a>
+                </li>
+                <li class="list-group-item"><a href="deseos.php" class="text-decoration-none text-dark">Mi Lista de
+                        Deseos</a></li>
                 <li class="list-group-item"><a href="#">Servicio al Cliente</a></li>
                 <li class="list-group-item"><a href="#">Idioma</a></li>
-                <li class="list-group-item"><a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a></li>
+                <li class="list-group-item"><a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true">Cerrar Sesión</a>
+                </li>
             </ul>
         </div>
     </div>
@@ -508,6 +526,7 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                         <div class="text-center">
                             <a href="cuenta.php" class="btn btn-secondary">Editar Perfil</a>
                             <a href="pedidos.php" class="btn btn-primary ms-2">Ver Mis Pedidos</a>
+                            <a href="deseos.php" class="btn btn-primary ms-2">Ver Lista de Deseados</a>
                             <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true" class="btn btn-danger ms-2">Cerrar
                                 sesion</a>
                         </div>
@@ -519,7 +538,6 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                 </div>
 
                 <div class="account-container">
-                    <?php echo $message; // Muestra mensajes de error o éxito ?>
 
                     <?php if ($user_perfil): ?>
                         <div class="card-header fw-bold">
@@ -575,7 +593,6 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                 </div>
 
                 <div class="account-container">
-                    <?php echo $message; // Muestra mensajes de error o éxito ?>
 
                     <?php if ($user_perfil): ?>
 
@@ -620,7 +637,6 @@ $user_display_name = $is_logged_in ? htmlspecialchars($_SESSION['user_usuario'])
                 </div>
 
                 <div class="account-container">
-                    <?php echo $message; // Muestra mensajes de error o éxito ?>
 
                     <?php if ($user_perfil): ?>
 

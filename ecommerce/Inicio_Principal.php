@@ -303,9 +303,11 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -390,7 +392,8 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
 
     <!-- Main Content -->
     <main class="container my-5">
-        <h2 class="text-center section-title">Nuestros Productos Destacados</h2>
+        <div class="mb-3"> <h2 class="text-center section-title">Nuestros Productos Destacados</h2></div>
+        
 
         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
             <?php if (empty($products)): ?>

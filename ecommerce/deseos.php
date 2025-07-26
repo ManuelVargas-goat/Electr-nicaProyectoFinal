@@ -304,6 +304,14 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
         .custom-toast.show {
             opacity: 1;
         }
+
+        .account-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+            padding: 30px;
+            margin-top: 30px;
+        }
     </style>
 </head>
 <body>
@@ -322,10 +330,13 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
             </div>
+
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
@@ -413,6 +424,25 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
 
         <div class="row justify-content-center">
             <div class="col-lg-10">
+
+                <div class="account-container">
+                    <?php echo $message; // Muestra mensajes de error o éxito ?>
+
+                    <?php if ($usuario_cliente_id): ?>
+                        <div class="text-center">
+                            <a href="cuenta.php" class="btn btn-primary">Editar Perfil</a>
+                            <a href="pedidos.php" class="btn btn-primary ms-2">Ver Mis Pedidos</a>
+                            <a href="deseos.php" class="btn btn-secondary ms-2">Ver Lista de Deseados</a>
+                            <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true" class="btn btn-danger ms-2">Cerrar
+                                sesion</a>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-info text-center" role="alert">
+                            No se pudo cargar la información de tu cuenta.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
                 <div class="wishlist-container">
                     <?php echo $message; // Muestra mensajes de error o si la lista está vacía ?>
 

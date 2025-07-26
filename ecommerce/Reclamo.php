@@ -461,9 +461,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">

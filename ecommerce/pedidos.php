@@ -355,6 +355,14 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
             text-decoration: underline;
             color: white;
         }
+
+        .account-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+            padding: 30px;
+            margin-top: 30px;
+        }
     </style>
 </head>
 
@@ -375,9 +383,11 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
             </a>
 
             <!-- Search Bar -->
-            <div class="d-flex flex-grow-1 search-bar">
-                <input class="form-control me-0 search-input" type="search" placeholder="Buscar en Mi Tienda" aria-label="Search">
-                <button class="btn search-button" type="submit"><i class="fas fa-search"></i></button>
+            <div class="d-flex flex-grow-1">
+                <form class="d-flex mx-auto" role="search" action="Inicio_Principal_Busqueda.php" method="GET">
+                        <input class="form-control" type="search" placeholder="Buscar..." aria-label="Buscar"style="color: black;" name="q">
+                        <button class="btn btn-outline-light ms-2" type="submit">Buscar</button>
+                    </form>
             </div>
 
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -482,6 +492,7 @@ if (isset($_GET['logout']) && $_GET['logout'] == 'true') {
                         <div class="text-center">
                             <a href="cuenta.php" class="btn btn-primary ms-2">Editar Perfil</a>
                             <a href="pedidos.php" class="btn btn-secondary ms-2">Ver Mis Pedidos</a>
+                            <a href="deseos.php" class="btn btn-primary ms-2">Ver Lista de Deseados</a>
                             <a href="<?php echo $_SERVER['PHP_SELF']; ?>?logout=true" class="btn btn-danger ms-2">Cerrar
                                 sesion</a>
                         </div>
